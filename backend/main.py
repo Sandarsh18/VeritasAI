@@ -1,14 +1,20 @@
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor, wait
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi import _rate_limit_exceeded_handler
 from pydantic import BaseModel
 import asyncio
+import json
 import os
 import requests
 import sys
 import threading
 import time
+
+from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -28,6 +34,11 @@ from graph.neo4j_client import (
     is_connected,
 )
 from db.sqlite_store import save_claim as sqlite_save, load_claims, load_stats
+from auth import get_optional_user
+from database import User, UserClaim, SessionLocal, get_db
+from rate_limit import limiter
+from routers.auth_router import router as auth_router
+from routers.user_router import router as user_router
 
 AGENT_MODELS = {
     "prosecutor": "llama3.2:1b",
@@ -45,6 +56,8 @@ DEFENDER_FALLBACK = {
     "arguments": ["No supporting evidence retrieved due to timeout"],
     "strongest_point": "Timeout - unable to analyze",
 }
+
+APP_START_TIME = time.time()
 
 
 def _ts() -> str:
@@ -80,6 +93,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Fake News Verification API", version="1.0.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -92,6 +108,12 @@ app.add_middleware(
 
 class ClaimRequest(BaseModel):
     claim: str
+
+
+def _extract_bearer(authorization: str | None) -> str | None:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    return authorization.split(" ", 1)[1].strip()
 
 
 def check_ollama() -> bool:
@@ -298,11 +320,31 @@ async def health():
     ollama_ok = await asyncio.to_thread(check_ollama)
     neo4j_ok = await asyncio.to_thread(is_connected)
     faiss_ok = await asyncio.to_thread(check_faiss)
+    db_ok = True
+    total_users = 0
+    total_claims_verified = 0
+    try:
+        db = SessionLocal()
+        total_users = db.query(User).count()
+        total_claims_verified = db.query(UserClaim).count()
+        db.close()
+    except Exception:
+        db_ok = False
+
     return {
-        "status": "healthy" if (ollama_ok and faiss_ok) else "degraded",
-        "ollama": {"status": "running" if ollama_ok else "not_running"},
-        "neo4j": {"status": "connected" if neo4j_ok else "not_connected"},
-        "faiss": {"status": "ready" if faiss_ok else "not_ready"},
+        "status": "healthy" if (ollama_ok and faiss_ok and db_ok) else "degraded",
+        "ollama": "connected" if ollama_ok else "disconnected",
+        "neo4j": "connected" if neo4j_ok else "disconnected",
+        "database": "connected" if db_ok else "disconnected",
+        "faiss_index": "loaded" if faiss_ok else "not_loaded",
+        "total_users": total_users,
+        "total_claims_verified": total_claims_verified,
+        "uptime_seconds": int(time.time() - APP_START_TIME),
+        "models": {
+            "prosecutor": "mistral",
+            "defender": "phi3",
+            "judge": "llama3",
+        },
     }
 
 
@@ -312,15 +354,51 @@ async def get_models():
 
 
 @app.post("/api/verify")
-async def verify_claim(request: ClaimRequest):
-    claim = request.claim.strip()
+@limiter.limit("10/hour")
+async def verify_claim(
+    request: Request,
+    payload: ClaimRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    claim = payload.claim.strip()
     if not claim:
         raise HTTPException(status_code=400, detail="Claim cannot be empty")
     if len(claim) < 10:
         raise HTTPException(status_code=400, detail="Claim too short")
 
     try:
-        return await asyncio.wait_for(run_pipeline(claim, quick=False), timeout=300)
+        result = await asyncio.wait_for(run_pipeline(claim, quick=False), timeout=300)
+
+        token = _extract_bearer(authorization)
+        user = get_optional_user(token, db) if token else None
+        if user:
+            transcript = {
+                "reasoning": result.get("reasoning"),
+                "key_evidence": result.get("key_evidence", []),
+                "recommendation": result.get("recommendation", ""),
+                "prosecutor": result.get("prosecutor", {}),
+                "defender": result.get("defender", {}),
+                "evidence": result.get("evidence", []),
+                "claim_analysis": result.get("claim_analysis", {}),
+            }
+            user_claim = UserClaim(
+                user_id=user.id,
+                claim_text=claim,
+                verdict=result.get("verdict", "UNVERIFIED"),
+                confidence=float(result.get("confidence", 0)),
+                reasoning=json.dumps(transcript),
+            )
+            db.add(user_claim)
+            user.total_claims = (user.total_claims or 0) + 1
+            db.commit()
+            db.refresh(user_claim)
+            result["id"] = user_claim.id
+            result["user_claim_id"] = user_claim.id
+        else:
+            result["id"] = result.get("claim_id")
+
+        return result
     except asyncio.TimeoutError:
         return {
             "verdict": "UNVERIFIED",
@@ -391,3 +469,7 @@ async def get_statistics():
                 "top_sources": [],
                 "error": str(exc),
             }
+
+
+app.include_router(auth_router, prefix="/api")
+app.include_router(user_router, prefix="/api")

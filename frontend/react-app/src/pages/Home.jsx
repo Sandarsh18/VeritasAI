@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Zap, AlertCircle } from 'lucide-react';
+import Confetti from 'react-confetti';
+import { Search, Zap, AlertCircle, Share2, Bookmark } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
-import { verifyClaim } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { bookmarkClaim, shareClaim, submitFeedback, verifyClaim } from '../services/api';
 import PipelineVisualizer from '../components/PipelineVisualizer';
 import VerdictBadge from '../components/VerdictBadge';
 import ConfidenceMeter from '../components/ConfidenceMeter';
 import AgentCard from '../components/AgentCard';
 import EvidenceCard from '../components/EvidenceCard';
+import { TwitterShareButton, WhatsappShareButton, TwitterIcon, WhatsappIcon } from 'react-share';
 
 const SAMPLE_CLAIMS = [
   "Drinking hot water cures COVID",
@@ -20,8 +23,10 @@ const STEP_LABELS = ['Evidence Retrieval', 'Prosecutor Analysis', 'Defender Anal
 
 export default function Home() {
   const { isLoading, setIsLoading, activeStep, setActiveStep, result, setResult } = useApp();
+  const { user, isAuthenticated } = useAuth();
   const [claim, setClaim] = useState('');
   const [error, setError] = useState('');
+  const [rating, setRating] = useState(0);
 
   const handleVerify = useCallback(async (claimText) => {
     const text = (claimText || claim).trim();
@@ -46,6 +51,9 @@ export default function Home() {
       clearInterval(stepInterval);
       setActiveStep(4);
       setResult(data);
+      if (isAuthenticated) {
+        localStorage.setItem('veritasai_first_login_done', '1');
+      }
       toast.success('Verification complete!');
     } catch (err) {
       clearInterval(stepInterval);
@@ -69,6 +77,7 @@ export default function Home() {
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
+      {result?.verdict === 'TRUE' && <Confetti recycle={false} numberOfPieces={160} />}
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -99,6 +108,11 @@ export default function Home() {
         <p style={{ opacity: 0.6, fontSize: '1.05rem', maxWidth: 520, margin: '0 auto' }}>
           Submit any news claim and our AI agents will debate, analyze and deliver a verdict
         </p>
+        {isAuthenticated ? (
+          <p style={{ marginTop: 10, opacity: 0.85 }}>Welcome back, {user?.full_name?.split(' ')[0] || user?.username}! 👋 <span style={{ marginLeft: 10, fontSize: '0.9rem', opacity: 0.8 }}>Claims verified: {user?.total_claims || 0}</span></p>
+        ) : (
+          <p style={{ marginTop: 10, opacity: 0.75 }}>Sign in to save your history</p>
+        )}
       </motion.div>
 
       {/* Input card */}
@@ -232,7 +246,7 @@ export default function Home() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="glass"
-              style={{ padding: '2rem', textAlign: 'center' }}
+              style={{ padding: '2rem', textAlign: 'center', ...(result.verdict === 'FALSE' ? { boxShadow: '0 0 25px rgba(239,68,68,0.45)' } : result.verdict === 'MISLEADING' ? { boxShadow: '0 0 25px rgba(245,158,11,0.45)' } : {}) }}
             >
               <div style={{ marginBottom: '1.5rem' }}>
                 <VerdictBadge verdict={result.verdict} size="large" />
@@ -267,6 +281,33 @@ export default function Home() {
                   {result.recommendation}
                 </div>
               )}
+
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <TwitterShareButton url={window.location.href} title={`VeritasAI verdict: ${result.verdict}`}><TwitterIcon size={34} round /></TwitterShareButton>
+                <WhatsappShareButton url={window.location.href} title={`VeritasAI verdict: ${result.verdict}`}><WhatsappIcon size={34} round /></WhatsappShareButton>
+                <button onClick={async () => { await navigator.clipboard.writeText(window.location.href); toast.success('Link copied'); }} style={{ border: '1px solid var(--border-dark)', borderRadius: 10, background: 'transparent', color: 'inherit', padding: '6px 10px', cursor: 'pointer' }}>🔗 Copy Link</button>
+                {isAuthenticated && result?.id && (
+                  <>
+                    <button onClick={async () => { await bookmarkClaim(result.id); toast.success('Save to My Claims ✅'); }} style={{ border: '1px solid var(--border-dark)', borderRadius: 10, background: 'transparent', color: 'inherit', padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><Bookmark size={14} /> Save to My Claims ✅</button>
+                    <button onClick={async () => { const d = await shareClaim(result.id); await navigator.clipboard.writeText(`${window.location.origin}${d.share_url}`); toast.success('Share link copied'); }} style={{ border: '1px solid var(--border-dark)', borderRadius: 10, background: 'transparent', color: 'inherit', padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><Share2 size={14} /> Share Result 🔗</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <button
+                          key={s}
+                          onClick={async () => {
+                            setRating(s);
+                            await submitFeedback(result.id, s, '');
+                            toast.success('Thanks for rating ⭐');
+                          }}
+                          style={{ border: 'none', background: 'transparent', color: rating >= s ? '#fbbf24' : '#94a3b8', cursor: 'pointer' }}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </motion.div>
 
             {/* Agent debate */}

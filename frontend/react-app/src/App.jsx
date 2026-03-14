@@ -1,12 +1,21 @@
+import React from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { AppProvider, useApp } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import History from './pages/History';
 import Graph from './pages/Graph';
 import Stats from './pages/Stats';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Profile from './pages/Profile';
+import Trending from './pages/Trending';
+import SharedClaim from './pages/SharedClaim';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -21,9 +30,14 @@ function AnimatedRoutes() {
       >
         <Routes location={location}>
           <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/history" element={<History />} />
           <Route path="/graph" element={<Graph />} />
           <Route path="/stats" element={<Stats />} />
+          <Route path="/trending" element={<Trending />} />
+          <Route path="/shared/:token" element={<SharedClaim />} />
         </Routes>
       </motion.div>
     </AnimatePresence>
@@ -32,9 +46,20 @@ function AnimatedRoutes() {
 
 function AppInner() {
   const { theme } = useApp();
+  const { isAuthenticated, user } = useAuth();
+
+  React.useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    const seen = localStorage.getItem('veritasai_onboarded');
+    if (!seen) {
+      toast.success(`🎉 Welcome to VeritasAI, ${user.full_name || user.username}! Start by verifying your first claim below.`);
+      localStorage.setItem('veritasai_onboarded', '1');
+    }
+  }, [isAuthenticated, user]);
+
   return (
     <BrowserRouter>
-      <div className={`animated-bg`} />
+      <div className="animated-bg" />
       <Navbar />
       <AnimatedRoutes />
       <Toaster
@@ -55,8 +80,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppInner />
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <AppInner />
+      </AppProvider>
+    </AuthProvider>
   );
 }
