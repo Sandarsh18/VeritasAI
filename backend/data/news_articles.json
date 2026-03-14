@@ -1,0 +1,322 @@
+[
+  {
+    "id": "health_001",
+    "title": "COVID-19 Vaccines Do Not Alter Human DNA, Scientists Confirm",
+    "content": "Multiple peer-reviewed studies and statements from leading health organizations including the WHO, CDC, and FDA have confirmed that COVID-19 mRNA vaccines do not alter human DNA. The claim that mRNA vaccines integrate into a person's genome is biologically impossible under normal conditions. mRNA, or messenger RNA, is a transient molecule that degrades within hours to days after injection. It never enters the cell nucleus where DNA is housed. The mRNA instructs cells to produce spike proteins to trigger an immune response, then breaks down naturally. Reverse transcription — the process that would be needed to convert RNA into DNA — does not occur in normal human cells without specific viral enzymes that are not present in COVID-19 vaccines. This misinformation has been thoroughly debunked by molecular biologists, virologists, and immunologists worldwide. Studies published in journals such as Nature and The Lancet have repeatedly shown no genomic integration. Believing this myth can discourage vaccination, contributing to preventable deaths and prolonged pandemic duration.",
+    "source": "WHO",
+    "credibility_score": 0.98,
+    "category": "health",
+    "verdict": "false",
+    "date": "2023-05-14"
+  },
+  {
+    "id": "health_002",
+    "title": "WHO Declares Global Monkeypox Outbreak a Public Health Emergency of International Concern",
+    "content": "The World Health Organization officially declared the 2022 monkeypox outbreak a Public Health Emergency of International Concern (PHEIC), the highest alert level the organization can issue. WHO Director-General Tedros Adhanom Ghebreyesus made this determination after a second meeting of the International Health Regulations Emergency Committee, which was unable to reach consensus but left the final decision to the Director-General. The outbreak, which began spreading in non-endemic countries in May 2022, had by that time been reported in over 70 countries, with more than 16,000 confirmed cases globally. The declaration was intended to boost international coordination, funding, and access to vaccines and treatments. This announcement was factual and represented an official public health determination based on established criteria including international spread, severity, and the risk of interference with international travel and trade.",
+    "source": "WHO",
+    "credibility_score": 0.99,
+    "category": "health",
+    "verdict": "true",
+    "date": "2022-07-23"
+  },
+  {
+    "id": "health_003",
+    "title": "Drinking Bleach or Disinfectants Does Not Cure or Prevent COVID-19",
+    "content": "Health authorities around the world, including the CDC, WHO, and the American Association of Poison Control Centers, have issued urgent warnings against consuming bleach, disinfectants, or ultraviolet light to treat COVID-19. This dangerous claim originated from statements suggesting that injecting or ingesting disinfectants could eliminate the coronavirus. Bleach and household disinfectants such as isopropyl alcohol are toxic when ingested and can cause severe chemical burns to the throat and stomach, respiratory failure, and death. Poison control centers reported a significant spike in calls related to disinfectant exposure in the days following viral promotion of this idea. There is absolutely no scientific basis for this claim. Approved treatments for COVID-19 include antiviral medications such as Paxlovid, dexamethasone for severe cases, and supplemental oxygen therapy. The U.S. Surgeon General and FDA issued explicit statements urging the public not to consume cleaning products under any circumstances.",
+    "source": "FactCheck.org",
+    "credibility_score": 0.97,
+    "category": "health",
+    "verdict": "false",
+    "date": "2020-04-25"
+  },
+  {
+    "id": "health_004",
+    "title": "Childhood Vaccines Are Not Linked to Autism, Major Meta-Analysis Confirms",
+    "content": "A comprehensive meta-analysis of 1.2 million children published in the journal Vaccine found no link between the MMR (measles, mumps, and rubella) vaccine and autism spectrum disorder. This study, along with dozens of independent large-scale investigations conducted in multiple countries over more than two decades, consistently demonstrates that vaccines do not cause autism. The original 1998 study by Andrew Wakefield that started this myth was retracted from The Lancet after investigators found that Wakefield had manipulated data, had undisclosed financial conflicts of interest, and had violated ethical standards in his research. Wakefield subsequently lost his medical license. The scientific and medical consensus, endorsed by the CDC, WHO, AAP, and virtually every major health organization worldwide, is unequivocal: vaccines are safe, effective, and do not cause autism. Vaccine hesitancy fueled by this myth has contributed to measles outbreaks in previously vaccinated communities across North America and Europe.",
+    "source": "Reuters",
+    "credibility_score": 0.99,
+    "category": "health",
+    "verdict": "false",
+    "date": "2019-05-02"
+  },
+  {
+    "id": "health_005",
+    "title": "Ivermectin Shows No Significant Benefit in Treating COVID-19, Landmark Trial Finds",
+    "content": "A large-scale randomized controlled trial known as the TOGETHER trial, conducted across multiple sites in Brazil, found that ivermectin — an antiparasitic drug — did not reduce the risk of hospitalization or death in patients with mild to moderate COVID-19. The trial enrolled over 3,500 high-risk adult outpatients and found no statistically significant benefit in the primary outcome. These findings were consistent with WHO guidance that recommended against ivermectin use outside of clinical trials for COVID-19. Despite widespread promotion of ivermectin on social media as a COVID-19 cure, multiple systematic reviews and rigorous trials have all failed to demonstrate meaningful clinical benefit. The FDA, EMA, and WHO have all issued statements discouraging its use for this purpose. The promotion of ivermectin as a COVID-19 treatment is considered misleading because, while some early low-quality studies suggested possible benefit, robust evidence from well-designed trials does not support its effectiveness.",
+    "source": "Reuters",
+    "credibility_score": 0.95,
+    "category": "health",
+    "verdict": "misleading",
+    "date": "2022-03-30"
+  },
+  {
+    "id": "health_006",
+    "title": "Drinking Alkaline Water Does Not Cure Cancer",
+    "content": "Claims circulating widely on social media assert that drinking alkaline water can cure cancer by changing the body's pH balance. This claim is scientifically unfounded. The human body maintains blood pH within a very narrow range of approximately 7.35 to 7.45 through highly efficient buffer systems involving the lungs and kidneys. Drinking alkaline water does not significantly alter blood or tissue pH. If it did, the resulting condition — alkalosis — would be medically dangerous. Cancer tumors can create a locally acidic microenvironment, but altering this environment via dietary means is not supported by clinical evidence as a cancer treatment. Major cancer research institutions including the American Cancer Society, Cancer Research UK, and the National Cancer Institute have all stated there is no scientific evidence that drinking alkaline water treats or prevents cancer. Patients who forego evidence-based cancer treatment in favor of alkaline water risk allowing their cancer to progress to later, less treatable stages.",
+    "source": "Snopes",
+    "credibility_score": 0.96,
+    "category": "health",
+    "verdict": "false",
+    "date": "2021-08-10"
+  },
+  {
+    "id": "health_007",
+    "title": "Regular Physical Activity Reduces Risk of Heart Disease and Type 2 Diabetes",
+    "content": "Extensive epidemiological evidence and multiple systematic reviews confirm that regular moderate-intensity physical activity significantly reduces the risk of cardiovascular disease, type 2 diabetes, certain cancers, depression, and premature death. The WHO recommends at least 150 to 300 minutes of moderate-intensity aerobic physical activity per week for adults. Studies involving hundreds of thousands of participants across diverse populations consistently show dose-response relationships between physical activity and health outcomes. A landmark study in The Lancet estimated that physical inactivity costs healthcare systems approximately $54 billion globally per year. Mechanisms through which exercise reduces disease risk include improving insulin sensitivity, lowering blood pressure, reducing inflammation, improving lipid profiles, and maintaining healthy body weight. These findings represent one of the most robust and replicated findings in all of medicine and public health.",
+    "source": "WHO",
+    "credibility_score": 0.99,
+    "category": "health",
+    "verdict": "true",
+    "date": "2022-10-05"
+  },
+  {
+    "id": "health_008",
+    "title": "5G Towers Do Not Spread COVID-19 Virus",
+    "content": "The claim that 5G mobile networks are responsible for spreading or causing COVID-19 is entirely false and scientifically incoherent. Viruses are biological entities that require direct transmission through respiratory droplets, aerosols, or surface contact. Radio waves used in 5G telecommunications — which operate in frequency ranges between 600 MHz and 86 GHz — cannot carry, transmit, or create viruses. COVID-19 is caused by the SARS-CoV-2 coronavirus, which was identified and genetically sequenced by scientists in January 2020. Multiple countries that did not have any 5G infrastructure at the time, including many in sub-Saharan Africa and Southeast Asia, experienced COVID-19 outbreaks. This false claim led to arson attacks on telecommunications towers in the United Kingdom and assaults on telecom workers. Full Fact, FactCheck.org, and every major scientific body have categorically rejected this claim as misinformation with no factual basis.",
+    "source": "FactCheck.org",
+    "credibility_score": 0.98,
+    "category": "health",
+    "verdict": "false",
+    "date": "2020-04-08"
+  },
+  {
+    "id": "politics_001",
+    "title": "U.S. Electoral College System Explained: History and Function",
+    "content": "The United States Electoral College is a process established in Article II, Section 1 of the U.S. Constitution, modified by the 12th Amendment, for electing the President and Vice President. Each state receives a number of electors equal to its total congressional representation — House seats plus Senate seats. There are 538 total electoral votes, and a candidate must receive a majority of 270 to win the presidency. Most states use a winner-takes-all approach where the candidate who wins the popular vote in that state receives all of the state's electoral votes. Maine and Nebraska use a congressional district method. The Electoral College was created by the Founders as a compromise between election by Congress and election by popular vote. It has been criticized for allowing candidates to win the presidency without the national popular vote, which has occurred in the 2000 and 2016 elections.",
+    "source": "Reuters",
+    "credibility_score": 0.97,
+    "category": "politics",
+    "verdict": "true",
+    "date": "2020-11-01"
+  },
+  {
+    "id": "politics_002",
+    "title": "Claim That Millions of Illegal Votes Were Cast in 2020 US Election Is False",
+    "content": "Numerous state and federal courts, election officials from both major political parties, the Cybersecurity and Infrastructure Security Agency (CISA), the Department of Justice, and independent fact-checkers have all concluded that the 2020 U.S. presidential election was conducted securely and that claims of widespread illegal voting are unfounded. Over 60 lawsuits challenging election results were dismissed by judges, including those appointed by both Republican and Democratic presidents, who found no credible evidence of widespread fraud. Former Attorney General William Barr stated that the Department of Justice found no evidence of widespread fraud that would have altered the election outcome. CISA described the 2020 election as the most secure in American history. The claim that millions of fraudulent votes were cast has been rated false by PolitiFact, FactCheck.org, Reuters, AP, and the Washington Post Fact Checker, among many others.",
+    "source": "PolitiFact",
+    "credibility_score": 0.97,
+    "category": "politics",
+    "verdict": "false",
+    "date": "2021-01-10"
+  },
+  {
+    "id": "politics_003",
+    "title": "Senate Filibuster Rule Requires 60 Votes to End Debate on Most Legislation",
+    "content": "The U.S. Senate filibuster is a procedural mechanism that allows senators to extend debate on legislation indefinitely, effectively blocking a vote on a bill. Under current Senate rules, ending a filibuster requires a cloture vote, which needs 60 of the 100 senators to agree to end debate. This means the minority party can block legislation that has majority support but lacks 60 votes. The filibuster is not in the Constitution; it evolved from a Senate rules change in 1806 and was first used intentionally in the 1830s. Budget reconciliation bills and presidential nominees (since 2013 for most nominees and 2017 for Supreme Court nominees) are exempt from the filibuster rule. The 60-vote threshold for regular legislation has been a subject of significant debate, with some senators calling for its elimination or modification.",
+    "source": "Reuters",
+    "credibility_score": 0.97,
+    "category": "politics",
+    "verdict": "true",
+    "date": "2021-03-18"
+  },
+  {
+    "id": "politics_004",
+    "title": "Politicians Voting Record on Healthcare Bill Misrepresented in Viral Posts",
+    "content": "A series of viral social media posts claimed that a group of senators voted against a healthcare bill that would have expanded Medicaid coverage to millions of uninsured Americans. Fact-checkers found the posts were misleading in two important ways. First, the vote cited was on a procedural motion to advance debate, not on the final bill itself. Voting against advancing procedural debate does not necessarily mean a senator opposes the underlying legislation — procedural votes are often used for strategic reasons including negotiating amendments. Second, several senators cited in the posts had publicly stated support for aspects of the bill. PolitiFact rated this claim as mostly false because, while the underlying vote data was technically accurate, the characterization of senators opposing healthcare expansion based on a procedural vote was deceptive and lacked critical context.",
+    "source": "PolitiFact",
+    "credibility_score": 0.94,
+    "category": "politics",
+    "verdict": "misleading",
+    "date": "2022-07-14"
+  },
+  {
+    "id": "politics_005",
+    "title": "NATO Alliance Article 5 Mutual Defense Clause Explained",
+    "content": "Article 5 of the North Atlantic Treaty, signed in 1949, is the cornerstone of the NATO alliance's collective defense principle. It states that an armed attack against one member state is considered an attack against all member states. In response to such an attack, each member nation is obligated to take action it deems necessary, including the use of armed force, to restore and maintain security in the North Atlantic area. Contrary to some claims, Article 5 does not automatically commit all NATO members to military action — each member retains discretion over how to respond. Article 5 has been invoked only once in NATO history, following the September 11, 2001 terrorist attacks against the United States, which led to NATO members contributing to operations in Afghanistan. The current 32 NATO member states are bound by this treaty obligation.",
+    "source": "Reuters",
+    "credibility_score": 0.98,
+    "category": "politics",
+    "verdict": "true",
+    "date": "2022-02-28"
+  },
+  {
+    "id": "politics_006",
+    "title": "Viral Image of Politician Shaking Hands at Event Is Digitally Altered",
+    "content": "A viral image circulating on social media appeared to show a prominent politician shaking hands with a controversial foreign official at a private dinner event. Reverse image searches and analysis by AFP and Reuters fact-checking teams confirmed that the image was digitally altered using AI image generation tools. The original photograph, taken at a different event in 2019, showed the politician shaking hands with a domestic official. The face of the foreign official was superimposed using deepfake technology. The politician's office denied the meeting had ever taken place, and an investigation by the AFP found no credible evidence that such a meeting occurred. Metadata analysis of the viral image revealed inconsistencies consistent with digital manipulation. This case illustrates the growing threat of AI-generated misinformation in political contexts.",
+    "source": "AFP",
+    "credibility_score": 0.95,
+    "category": "politics",
+    "verdict": "false",
+    "date": "2023-09-22"
+  },
+  {
+    "id": "politics_007",
+    "title": "Government Spending on Foreign Aid Constitutes Less Than 1% of U.S. Federal Budget",
+    "content": "According to a consistent body of survey research, most Americans significantly overestimate the proportion of the federal budget devoted to foreign aid. Polls regularly show Americans believe foreign aid comprises around 25 to 30 percent of the federal budget. In reality, international affairs funding, which includes all foreign assistance programs, diplomacy, and international security operations, consistently accounts for approximately 1 percent of total federal discretionary spending. For fiscal year 2023, the U.S. spent approximately $63 billion on international affairs out of a total federal budget exceeding $6.2 trillion. This amounts to roughly 1 percent. The State Department, USAID, and independent budget analysis organizations such as the Peter G. Peterson Foundation have all confirmed this figure. Misunderstanding the scale of foreign aid spending is frequently cited as a driver of public support for cutting programs that form a small fraction of total government expenditure.",
+    "source": "FactCheck.org",
+    "credibility_score": 0.96,
+    "category": "politics",
+    "verdict": "true",
+    "date": "2023-02-15"
+  },
+  {
+    "id": "politics_008",
+    "title": "Claim That Immigration Causes Higher Crime Rates Not Supported by Evidence",
+    "content": "The claim that immigrants — including undocumented immigrants — cause higher crime rates has been repeatedly examined by researchers and found to be unsupported by the available evidence. A comprehensive review of studies published in the Annual Review of Criminology found that immigrants are less likely to commit crimes than native-born citizens, and that increases in immigration are associated with decreases in violent and property crimes in many cities. Data from the Texas Department of Public Safety, one of the few states that tracks criminal convictions by immigration status, consistently shows that both legal immigrants and undocumented immigrants have lower conviction rates for most crimes compared to native-born U.S. citizens. The National Academies of Sciences reviewed extensive research and concluded that immigration does not increase crime. While individual high-profile cases involving immigrant perpetrators receive disproportionate media attention, these do not represent the broader statistical trend.",
+    "source": "PolitiFact",
+    "credibility_score": 0.93,
+    "category": "politics",
+    "verdict": "misleading",
+    "date": "2022-04-07"
+  },
+  {
+    "id": "science_001",
+    "title": "97% of Climate Scientists Agree That Human-Caused Climate Change Is Real",
+    "content": "Multiple independent studies using different methodologies have consistently found that approximately 97 percent of actively publishing climate scientists agree that human activities are causing the current warming of the global climate. The most frequently cited study, published in Environmental Research Letters by Cook et al. (2013), analyzed 11,944 peer-reviewed climate science abstracts and found that 97.1 percent of papers that took a position endorsed the consensus that humans are causing global warming. Separate studies by Anderegg et al., Doran and Zimmerman, and others reached similar conclusions. The world's leading scientific organizations — including NASA, NOAA, the American Meteorological Society, the American Geophysical Union, the National Academy of Sciences, and their counterparts in over 40 other countries — have issued statements affirming this consensus. The IPCC Sixth Assessment Report (2021) described the evidence as unequivocal.",
+    "source": "Reuters",
+    "credibility_score": 0.99,
+    "category": "science",
+    "verdict": "true",
+    "date": "2021-08-09"
+  },
+  {
+    "id": "science_002",
+    "title": "Evolution Is Established Scientific Theory Supported by Overwhelming Evidence",
+    "content": "The theory of evolution by natural selection, first proposed by Charles Darwin in 1859, is one of the most well-supported theories in all of science. Evolution is supported by evidence from genetics, paleontology, comparative anatomy, biogeography, molecular biology, and direct observation of evolutionary change in real time. The discovery of DNA and subsequent developments in genomics have provided powerful confirmation of evolutionary relationships. For example, humans share approximately 98.7 percent of their DNA with chimpanzees, consistent with a recent common ancestor. Transitional fossils, such as Tiktaalik (a transitional fish-to-land animal), have been found exactly where evolutionary theory predicted. Direct observation of evolution has been documented in bacteria developing antibiotic resistance, viruses mutating, and controlled laboratory experiments such as the E. coli Long-Term Evolution Experiment, which has been running for over 30 years. Every major scientific organization endorses evolution as the explanation for the diversity of life on Earth.",
+    "source": "Reuters",
+    "credibility_score": 0.99,
+    "category": "science",
+    "verdict": "true",
+    "date": "2022-01-20"
+  },
+  {
+    "id": "science_003",
+    "title": "Claim That Earth Is Flat Contradicted by Centuries of Scientific Evidence",
+    "content": "The claim that the Earth is flat contradicts more than 2,000 years of scientific evidence and observation. The spherical shape of the Earth was known to ancient Greek philosophers including Pythagoras and Aristotle, who noted that the shadow Earth casts on the moon during lunar eclipses is always circular. Eratosthenes accurately calculated the Earth's circumference around 240 BCE. Modern evidence for Earth's spherical shape includes: satellite imagery from orbit, GPS systems that only work correctly when accounting for Earth's curvature, the fact that ships disappear hull-first over the horizon, time zones, the different star constellations visible from different hemispheres, the ability to circumnavigate the globe, and photographs taken from the International Space Station and from dozens of independent national space programs. GPS satellites, which are used by billions of people daily, require relativistic corrections based on Earth's spherical shape and would not function on a flat Earth. Flat Earth claims rely on misunderstanding of physics, optics, and documented evidence.",
+    "source": "AFP",
+    "credibility_score": 0.99,
+    "category": "science",
+    "verdict": "false",
+    "date": "2023-03-15"
+  },
+  {
+    "id": "science_004",
+    "title": "Antarctic Ice Sheet Is Losing Mass at Accelerating Rate, Satellite Data Shows",
+    "content": "Data from NASA's GRACE and GRACE-FO satellite missions, which measure gravitational variations to track changes in ice mass, confirm that the Antarctic Ice Sheet has been losing ice mass at an accelerating rate. Between 1992 and 2017, Antarctica lost approximately 2,720 billion tonnes of ice, contributing about 7.6 millimeters to global sea level rise. A comprehensive multi-institute study published in Nature found that the rate of ice loss tripled between 1992–2002 and 2012–2017. The West Antarctic Ice Sheet and parts of the East Antarctic Ice Sheet are most vulnerable, with marine ice sheet instability identified as a potential tipping point. These findings are consistent with predictions from climate models. While seasonal variation and some regions experiencing localized ice gain exist, the overall trend of accelerating mass loss is well established and represents a significant contribution to ongoing global sea level rise.",
+    "source": "Reuters",
+    "credibility_score": 0.98,
+    "category": "science",
+    "verdict": "true",
+    "date": "2023-06-20"
+  },
+  {
+    "id": "science_005",
+    "title": "GMO Foods Approved for Human Consumption Are Safe to Eat, Scientific Consensus Shows",
+    "content": "A comprehensive report by the National Academies of Sciences, Engineering, and Medicine — the most thorough study of GMOs at the time of its publication in 2016 — examined more than 900 studies and found no substantiated evidence that genetically engineered foods currently on the market are less safe to eat than conventionally bred crops. This conclusion is supported by the WHO, the American Medical Association, the European Commission (which funded more than 130 research projects on GMO safety), and virtually every major scientific and regulatory body that has reviewed the evidence. Claims that GMOs cause cancer, allergies, or organ damage have not been supported by rigorous scientific evidence. The European Food Safety Authority independently reviews each GMO before approval. While legitimate debates exist about the ecological, economic, and social impacts of GMO agriculture, the safety of approved GMO foods for human consumption has a strong scientific consensus comparable to that for vaccine safety and human-caused climate change.",
+    "source": "WHO",
+    "credibility_score": 0.96,
+    "category": "science",
+    "verdict": "true",
+    "date": "2021-11-09"
+  },
+  {
+    "id": "science_006",
+    "title": "Homeopathy Has No Scientific Evidence of Effectiveness Beyond Placebo",
+    "content": "Homeopathy, a practice developed in the late 18th century based on the concept that 'like cures like' and that extreme dilutions of substances gain healing power, has been extensively studied and found to have no scientific basis and no clinical effectiveness beyond placebo. The core claim of homeopathy — that water retains a 'memory' of substances it once contained — is incompatible with basic chemistry and physics. At the dilutions used in homeopathy (often 30C, meaning diluted by a factor of 10 to the 60th power), no molecules of the original substance remain. The Australian National Health and Medical Research Council conducted the most comprehensive systematic review of homeopathy in 2015 and found no good quality evidence that homeopathy was effective for any health condition. The UK's National Institute for Health and Care Excellence does not recommend homeopathic treatments on the NHS. Patients who rely on homeopathy in lieu of evidence-based treatments for serious conditions risk harm from delayed or forgone treatment.",
+    "source": "Snopes",
+    "credibility_score": 0.97,
+    "category": "science",
+    "verdict": "false",
+    "date": "2020-09-12"
+  },
+  {
+    "id": "science_007",
+    "title": "Microplastics Found in Human Blood and Tissue, Studies Confirm",
+    "content": "Multiple peer-reviewed studies have confirmed the presence of microplastic particles in human blood, lung tissue, placenta, and other organs. A 2022 study published in Environment International by researchers at Vrije Universiteit Amsterdam detected microplastics in the blood of 77 of 22 study participants using a validated technique. Microplastics smaller than 5 millimeters have been found in bottled water, tap water, food, and air. Studies have detected them in remote environments including Arctic sea ice and the summit of Mount Everest. While the health implications of microplastics in human tissue are still being studied and remain uncertain, their presence in human bodies has been definitively established. Researchers are currently investigating potential links to inflammation, endocrine disruption, and other health effects. This is an area of active and legitimate scientific inquiry, though claims about specific health harms beyond detected presence should be regarded as preliminary.",
+    "source": "Reuters",
+    "credibility_score": 0.92,
+    "category": "science",
+    "verdict": "true",
+    "date": "2022-09-15"
+  },
+  {
+    "id": "science_008",
+    "title": "Sugar Does Not Cause Hyperactivity in Children, Research Shows",
+    "content": "Despite being a widely held belief by parents, the claim that sugar causes hyperactivity in children is not supported by scientific evidence. A comprehensive meta-analysis of 23 double-blind randomized controlled trials published in JAMA (Journal of the American Medical Association) found that sugar does not affect the behavior or cognitive performance of children, including those with Attention Deficit Hyperactivity Disorder (ADHD) or who are considered 'sugar-sensitive' by their parents. The perception that children become hyperactive after consuming sugar is likely explained by the placebo effect and contextual expectations — children consume sugar at parties and celebrations, which are already exciting environments. Research consistently shows that parents who believe their child consumed sugar rate the child as more hyperactive even when the child received a sugar-free placebo. This myth, though harmless in most contexts, illustrates how strongly held beliefs can persist in the face of contrary scientific evidence.",
+    "source": "FactCheck.org",
+    "credibility_score": 0.95,
+    "category": "science",
+    "verdict": "false",
+    "date": "2021-04-22"
+  },
+  {
+    "id": "technology_001",
+    "title": "5G Radiation Does Not Cause Cancer, Health Authorities Confirm",
+    "content": "Health authorities including the WHO, the International Commission on Non-Ionizing Radiation Protection (ICNIRP), and national health agencies worldwide have concluded that 5G electromagnetic fields, when operated within established safety guidelines, do not pose a health risk including cancer. 5G technology uses non-ionizing radio waves, which do not have sufficient energy to break chemical bonds or remove electrons from atoms — the mechanism by which ionizing radiation such as X-rays causes cellular DNA damage. The radio frequencies used by 5G (ranging from sub-6 GHz to millimeter wave bands up to approximately 100 GHz) have been extensively studied. While millimeter waves penetrate less deeply into tissue than lower frequencies, they have not been shown to cause cancer or other adverse health effects at the power levels used in telecommunications. The IARC (International Agency for Research on Cancer) classifies radiofrequency electromagnetic fields as possibly carcinogenic (Group 2B), the same classification as coffee and pickled vegetables — based on limited and inconsistent evidence.",
+    "source": "WHO",
+    "credibility_score": 0.97,
+    "category": "technology",
+    "verdict": "false",
+    "date": "2020-06-05"
+  },
+  {
+    "id": "technology_002",
+    "title": "Social Media Use Linked to Increased Depression and Anxiety in Adolescents",
+    "content": "A growing body of research suggests a correlation between heavy social media use and increased rates of depression, anxiety, and poor mental health outcomes in adolescents, particularly girls. A landmark study by Jean Twenge and Jonathan Haidt analyzing data from the Youth Risk Behavior Survey found significant increases in teen depression, loneliness, and self-harm rates starting around 2012, coinciding with the widespread adoption of smartphones and social media. A 2022 study in JAMA Psychiatry found that adolescents who used social media more than three hours per day were at significantly elevated risk for internalizing problems. Meta's own internal research, revealed in the Facebook Papers, found that Instagram use made body image issues worse for teenage girls. However, researchers caution that the relationship is complex, bidirectional, and that vulnerable individuals may be more drawn to social media rather than social media causing vulnerability. The evidence suggests correlation with mixed evidence on causation, making definitive causal claims misleading without additional context.",
+    "source": "Reuters",
+    "credibility_score": 0.88,
+    "category": "technology",
+    "verdict": "misleading",
+    "date": "2023-02-28"
+  },
+  {
+    "id": "technology_003",
+    "title": "Quantum Computing Does Not Yet Break Modern Encryption",
+    "content": "Claims that quantum computers have already broken or can currently break the encryption protecting banking, government communications, and the internet are false. While quantum computers theoretically pose a long-term threat to certain encryption algorithms — specifically RSA and ECC public-key cryptography, which could be broken by a sufficiently large quantum computer running Shor's algorithm — no quantum computer currently exists with enough stable qubits to threaten current encryption standards. As of 2024, the most advanced quantum computers from IBM, Google, and others have reached around 1,000+ physical qubits, but breaking 2048-bit RSA encryption would require millions of error-corrected logical qubits — a capability decades away by most expert estimates. NIST (National Institute of Standards and Technology) has already standardized post-quantum cryptography algorithms designed to be resistant to quantum attacks. The long-term threat is real and taken seriously, but the near-term threat to current encryption is not.",
+    "source": "AFP",
+    "credibility_score": 0.94,
+    "category": "technology",
+    "verdict": "misleading",
+    "date": "2023-08-15"
+  },
+  {
+    "id": "technology_004",
+    "title": "AI Chatbots Cannot Access Real-Time Internet Information by Default",
+    "content": "Many users believe that AI language models like ChatGPT can access the internet in real time to retrieve current information during a conversation. This is incorrect for the base models without specific tools enabled. Standard large language model deployments operate from a static training dataset with a knowledge cutoff date. They do not make live internet searches, cannot access real-time news, stock prices, or current events, and their responses are generated entirely from patterns learned during training. This distinction is important: when base LLMs provide information about current events, they are recalling training data, not retrieving live information. Some platforms have added optional web browsing tools or search plugins that allow certain AI assistants to make web queries, but this is a separate added capability, not inherent to the underlying model. Misunderstanding this characteristic leads users to over-trust AI responses about recent events and undercorrect for the possibility of outdated or hallucinated information.",
+    "source": "FactCheck.org",
+    "credibility_score": 0.93,
+    "category": "technology",
+    "verdict": "true",
+    "date": "2023-05-18"
+  },
+  {
+    "id": "technology_005",
+    "title": "Electric Vehicles Have Lower Lifetime Carbon Emissions Than Gasoline Vehicles in Most Regions",
+    "content": "A comprehensive lifecycle analysis published by the International Council on Clean Transportation (ICCT) and multiple independent studies have confirmed that battery electric vehicles (BEVs) produce significantly lower greenhouse gas emissions over their full lifetime than comparable gasoline-powered vehicles, even when accounting for manufacturing emissions (including battery production) and the carbon intensity of electricity generation. In Europe, an electric car produces around 66 to 69 percent lower lifecycle emissions than a gasoline car. In the United States, the advantage is approximately 60 to 68 percent, varying by regional electricity grid. Even in countries with relatively coal-heavy electricity grids, EVs typically produce fewer lifetime emissions. As electricity grids become cleaner over time, the advantage of EVs grows further. The upfront carbon cost of battery manufacturing is real but is offset within one to three years of typical driving. The claim that EVs are no better for the environment than gasoline cars because of battery production is therefore misleading.",
+    "source": "Reuters",
+    "credibility_score": 0.95,
+    "category": "technology",
+    "verdict": "misleading",
+    "date": "2023-01-12"
+  },
+  {
+    "id": "technology_006",
+    "title": "Facial Recognition Technology Shown to Have Higher Error Rates for Darker-Skinned Individuals",
+    "content": "Research by MIT Media Lab researcher Joy Buolamwini and colleagues published in the study 'Gender Shades' (2018) demonstrated that commercial facial recognition systems from major technology companies showed significantly higher error rates when identifying the gender of darker-skinned individuals, particularly darker-skinned women, compared to lighter-skinned men. The best-performing system had an error rate of 0.8 percent for lighter-skinned men but 34.7 percent for darker-skinned women — a difference of more than 34 percentage points. Subsequent research has confirmed these disparities in accuracy across different facial recognition applications. NIST (National Institute of Standards and Technology) conducted a large-scale evaluation in 2019 finding that many algorithms showed higher false positive rates for African American and Asian faces compared to Caucasian faces. These documented disparities have significant implications for the use of facial recognition in law enforcement, hiring, and security contexts, where errors can have serious consequences for individuals misidentified.",
+    "source": "AFP",
+    "credibility_score": 0.96,
+    "category": "technology",
+    "verdict": "true",
+    "date": "2022-05-10"
+  },
+  {
+    "id": "technology_007",
+    "title": "Claim That Phones Are Always Listening to Conversations for Ads Not Substantiated",
+    "content": "The widely held belief that smartphones continuously record ambient conversations to serve targeted advertisements is not substantiated by technical investigations or credible evidence. Security researchers and journalists at organizations including Gizmodo and WIRED have conducted extensive experiments, deliberately speaking specific trigger words near phones and monitoring network traffic, without finding evidence that audio data was being transmitted. Researchers at Northeastern University ran controlled experiments for 17,000 hours testing whether popular apps activated microphones unprompted and found no evidence of secret audio collection. The more likely explanation for the eerie feeling that phones 'heard' a conversation is confirmation bias — users notice ads related to things they've discussed but ignore the much larger number of irrelevant ads, and they don't realize the sophistication of interest inference from browsing behavior, location data, and social connections. While companies do collect vast amounts of behavioral data, continuous audio surveillance would require significant battery, bandwidth, and storage resources that would be detectable.",
+    "source": "Snopes",
+    "credibility_score": 0.90,
+    "category": "technology",
+    "verdict": "misleading",
+    "date": "2022-11-30"
+  },
+  {
+    "id": "technology_008",
+    "title": "Major Data Breaches Expose Billions of Credentials Annually, Security Reports Show",
+    "content": "Annual cybersecurity reports from IBM, Verizon, and independent researchers consistently document that billions of personal credentials — including usernames, passwords, email addresses, and financial information — are stolen and exposed through data breaches each year. The Verizon Data Breach Investigations Report (DBIR) for 2023 analyzed over 16,312 security incidents and 5,199 confirmed data breaches. The IBM Cost of a Data Breach Report 2023 found that the average cost of a data breach globally reached $4.45 million, a record high. Notable breaches in recent years include incidents at Yahoo (3 billion accounts), LinkedIn (700 million records), Facebook (533 million records), and hundreds of healthcare organizations. These breaches are well-documented with evidence from dark web monitoring, security research, and company disclosures required by law in many jurisdictions. Password reuse across sites makes these breaches particularly dangerous, as stolen credentials from one breach can be used to access other services.",
+    "source": "Reuters",
+    "credibility_score": 0.97,
+    "category": "technology",
+    "verdict": "true",
+    "date": "2023-08-01"
+  }
+]

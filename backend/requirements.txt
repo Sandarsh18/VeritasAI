@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sentence-transformers
+faiss-cpu
+langchain
+langchain-community
+neo4j
+requests
+python-dotenv
+pydantic
+numpy
