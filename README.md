@@ -159,7 +159,7 @@ Neo4j
 
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/VeritasAI.git
+git clone https://github.com/Sandarsh18/VeritasAI.git
 cd VeritasAI
 ```
 
@@ -318,6 +318,6 @@ Made with ❤️ by **Sandarsh J N** | RV College of Engineering
 
 ⭐ **Star this repo if you found it useful!** ⭐
 
-[![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/VeritasAI?style=social)](https://github.com/YOUR_USERNAME/VeritasAI)
+[![GitHub stars](https://img.shields.io/github/stars/Sandarsh18/VeritasAI?style=social)](https://github.com/Sandarsh18/VeritasAI)
 
 </div>
