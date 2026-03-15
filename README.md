@@ -57,100 +57,101 @@ transparent, source-cited, explainable verdict.
 
 ## 🔄 How It Works
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E8F0FF', 'primaryTextColor': '#111827', 'primaryBorderColor': '#2563EB', 'lineColor': '#334155', 'secondaryColor': '#ECFDF5', 'tertiaryColor': '#FEF3C7', 'fontFamily': 'Arial' }}}%%
 flowchart TD
-    A([👤 User submits a claim]) --> B[🔍 Claim Analyzer\nMistral 7B]
-    B --> C[(📚 FAISS Vector Search\nRAG Evidence Engine)]
-    C --> D[Top 3-5 relevant\nfact-checked articles]
+    A([User submits a claim]) --> B[Claim Analyzer]
+    B --> C[(Hybrid Evidence Engine)]
+    C --> D[Top 3 to 5 relevant articles]
     D --> E{⚡ Parallel Execution}
-    E --> F[🔴 Prosecutor Agent\nMistral 7B\nFinds contradictions]
-    E --> G[🟢 Defender Agent\nPhi-3 Mini\nFinds support]
-    F --> H[⚖️ Judge Agent\nLLaMA 3\nEvaluates both sides]
+    E --> F[Prosecutor Agent\nFinds contradictions]
+    E --> G[Defender Agent\nFinds support]
+    F --> H[Judge Agent\nEvaluates both sides]
     G --> H
-    H --> I{📊 Dynamic Confidence\nScoring}
-    I --> J[(🕸️ Neo4j\nKnowledge Graph\nStore & Deduplicate)]
-    I --> K([✅ Explainable Verdict\nTRUE / FALSE /\nMISLEADING / UNVERIFIED])
+    H --> I{Dynamic Confidence\nScoring}
+    I --> J[(Neo4j Knowledge Graph\nStore and Deduplicate)]
+    I --> K([Explainable Verdict\nTRUE / FALSE /\nMISLEADING / UNVERIFIED])
     
-    style A fill:#6366f1,color:#fff
-    style K fill:#10b981,color:#fff
-    style H fill:#f59e0b,color:#fff
-    style F fill:#ef4444,color:#fff
-    style G fill:#10b981,color:#fff
-    style C fill:#3b82f6,color:#fff
-    style J fill:#8b5cf6,color:#fff
+    style A fill:#DBEAFE,color:#111827,stroke:#2563EB
+    style K fill:#DCFCE7,color:#111827,stroke:#16A34A
+    style H fill:#FEF3C7,color:#111827,stroke:#D97706
+    style F fill:#FEE2E2,color:#111827,stroke:#DC2626
+    style G fill:#DCFCE7,color:#111827,stroke:#16A34A
+    style C fill:#E0F2FE,color:#111827,stroke:#0284C7
+    style J fill:#F3E8FF,color:#111827,stroke:#7C3AED
 ```
 
 ---
 
 ## 🏗️ System Architecture
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F8FAFC', 'primaryTextColor': '#111827', 'primaryBorderColor': '#334155', 'lineColor': '#475569', 'clusterBkg': '#F8FAFC', 'clusterBorder': '#94A3B8', 'fontFamily': 'Arial' }}}%%
 graph TB
-    subgraph UI["🖥️ Frontend — React 18 + Vite (Port 5173)"]
-        P1[🏠 Home\nClaim Input]
-        P2[📜 History\nClaims Archive]
-        P3[🕸️ Graph\nKnowledge Network]
-        P4[📊 Stats\nAnalytics Dashboard]
+    subgraph UI["Frontend: React 18 + Vite (5173)"]
+        P1[Home\nClaim Input]
+        P2[History\nClaims Archive]
+        P3[Graph\nKnowledge Network]
+        P4[Stats and Sources\nUI Pages]
     end
 
-    subgraph API["⚡ Backend — FastAPI (Port 8000)"]
+    subgraph API["Backend: FastAPI (8000)"]
         E1[POST /api/verify]
-        E2[GET /api/claims/history]
-        E3[GET /api/graph]
-        E4[GET /api/stats]
-        E5[GET /health]
+        E2[GET /api/sources]
+        E3[GET /api/history and stats]
+        E4[GET /health]
     end
 
-    subgraph RAG["🔍 RAG Engine"]
+    subgraph RAG["Evidence Layer"]
         R1[Sentence Transformers\nall-MiniLM-L6-v2]
-        R2[FAISS\nVector Index]
-        R3[📰 News Articles\nCorpus JSON]
+        R2[FAISS Archive Index]
+        R3[Real-time Fetcher\nNewsAPI + GDELT + RSS]
     end
 
-    subgraph AGENTS["🤖 Multi-Agent Pipeline"]
-        AG1[🔴 Prosecutor\nMistral 7B]
-        AG2[🟢 Defender\nPhi-3 Mini]
-        AG3[⚖️ Judge\nLLaMA 3]
+    subgraph AGENTS["Multi-Agent Pipeline"]
+        AG1[Prosecutor]
+        AG2[Defender]
+        AG3[Judge]
     end
 
-    subgraph MEMORY["🧠 Memory Layer"]
-        N1[(Neo4j\nKnowledge Graph)]
-        N2[Claim Nodes]
-        N3[Article Nodes]
-        N4[Source Nodes]
+    subgraph MEMORY["Memory Layer"]
+        N1[(Neo4j Knowledge Graph)]
+        N2[(SQLite Claim Store)]
     end
 
-    subgraph LLM["🦙 Ollama Local LLM Server\n(Port 11434)"]
+    subgraph LLM["Ollama Local Models (11434)"]
         L1[llama3.2:1b]
-        L2[mistral:7b]
-        L3[phi3:mini]
+        L2[mistral]
+        L3[phi3]
     end
 
     UI <--> API
     API --> RAG
     RAG --> AGENTS
-    AG1 & AG2 --> AG3
+    AG1 --> AG3
+    AG2 --> AG3
     AG3 --> MEMORY
     AGENTS <--> LLM
 
-    style UI fill:#1e1b4b,color:#a5b4fc
-    style API fill:#064e3b,color:#6ee7b7
-    style RAG fill:#1e3a5f,color:#93c5fd
-    style AGENTS fill:#3b0764,color:#e9d5ff
-    style MEMORY fill:#1a1a2e,color:#818cf8
-    style LLM fill:#292524,color:#d6d3d1
+    style UI fill:#E0F2FE,color:#111827,stroke:#0284C7
+    style API fill:#DCFCE7,color:#111827,stroke:#16A34A
+    style RAG fill:#DBEAFE,color:#111827,stroke:#2563EB
+    style AGENTS fill:#F3E8FF,color:#111827,stroke:#7C3AED
+    style MEMORY fill:#FEF3C7,color:#111827,stroke:#D97706
+    style LLM fill:#F1F5F9,color:#111827,stroke:#475569
 ```
 
 ---
 
 ## 🤖 Agent Roles
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryTextColor': '#111827', 'lineColor': '#475569', 'signalColor': '#2563EB', 'signalTextColor': '#111827', 'actorBorder': '#2563EB', 'actorBkg': '#DBEAFE', 'actorTextColor': '#111827', 'labelBoxBkgColor': '#F8FAFC', 'labelBoxBorderColor': '#94A3B8', 'fontFamily': 'Arial' }}}%%
 sequenceDiagram
     actor User
-    participant CA as 🔍 Claim Analyzer
-    participant RAG as 📚 RAG Engine
-    participant P as 🔴 Prosecutor
-    participant D as 🟢 Defender
-    participant J as ⚖️ Judge
-    participant KG as 🕸️ Knowledge Graph
+    participant CA as Claim Analyzer
+    participant RAG as Evidence Engine
+    participant P as Prosecutor
+    participant D as Defender
+    participant J as Judge
+    participant KG as Knowledge Graph
 
     User->>CA: Submit claim
     CA->>CA: Classify type & extract entities
@@ -165,15 +166,16 @@ sequenceDiagram
         D-->>J: Support found
     end
 
-    J->>J: Weigh arguments\n+ credibility scores
+    J->>J: Weigh arguments\nand credibility scores
     J->>KG: Store claim & relationships
-    J-->>User: Verdict + Confidence\n+ Reasoning + Evidence
+    J-->>User: Verdict + Confidence\nReasoning + Evidence
 ```
 
 ---
 
 ## ⚖️ Verdict Decision Logic
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F8FAFC', 'primaryTextColor': '#111827', 'primaryBorderColor': '#475569', 'lineColor': '#475569', 'fontFamily': 'Arial' }}}%%
 flowchart LR
     A[Evidence\nRetrieved] --> B{Source\nCredibility}
     B -->|avg > 0.7| C{Argument\nBalance}
@@ -186,17 +188,18 @@ flowchart LR
     G -->|65-84%| H[MISLEADING\n55-74%]
     G -->|< 65%| I[UNVERIFIED\n45-54%]
 
-    style E fill:#ef4444,color:#fff
-    style F fill:#10b981,color:#fff
-    style H fill:#f59e0b,color:#fff
-    style D fill:#6b7280,color:#fff
-    style I fill:#6b7280,color:#fff
+    style E fill:#FEE2E2,color:#111827,stroke:#DC2626
+    style F fill:#DCFCE7,color:#111827,stroke:#16A34A
+    style H fill:#FEF3C7,color:#111827,stroke:#D97706
+    style D fill:#E2E8F0,color:#111827,stroke:#64748B
+    style I fill:#E2E8F0,color:#111827,stroke:#64748B
 ```
 
 ---
 
 ## 🕸️ Knowledge Graph Schema
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F8FAFC', 'primaryTextColor': '#111827', 'primaryBorderColor': '#475569', 'lineColor': '#475569', 'tertiaryColor': '#F8FAFC', 'fontFamily': 'Arial' }}}%%
 erDiagram
     CLAIM {
         string id PK
@@ -248,6 +251,7 @@ erDiagram
 
 ## 🛠️ Tech Stack
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryTextColor': '#111827', 'primaryColor': '#F8FAFC', 'lineColor': '#475569', 'fontFamily': 'Arial' }}}%%
 mindmap
   root((VeritasAI))
     Backend
@@ -338,6 +342,7 @@ cd frontend/react-app && npm run dev
 
 ## 🔌 API Reference
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#F8FAFC', 'primaryTextColor': '#111827', 'primaryBorderColor': '#475569', 'lineColor': '#475569', 'clusterBkg': '#F8FAFC', 'clusterBorder': '#94A3B8', 'fontFamily': 'Arial' }}}%%
 graph LR
     subgraph Endpoints["📡 REST API — Port 8000"]
         A[POST /api/verify\nFull pipeline 131s]
@@ -350,14 +355,14 @@ graph LR
         H[GET /health\nSystem status]
     end
 
-    style A fill:#6366f1,color:#fff
-    style B fill:#10b981,color:#fff
-    style C fill:#3b82f6,color:#fff
-    style D fill:#8b5cf6,color:#fff
-    style E fill:#f59e0b,color:#fff
-    style F fill:#ec4899,color:#fff
-    style G fill:#14b8a6,color:#fff
-    style H fill:#0ea5e9,color:#fff
+    style A fill:#DBEAFE,color:#111827,stroke:#2563EB
+    style B fill:#DCFCE7,color:#111827,stroke:#16A34A
+    style C fill:#E0F2FE,color:#111827,stroke:#0284C7
+    style D fill:#F3E8FF,color:#111827,stroke:#7C3AED
+    style E fill:#FEF3C7,color:#111827,stroke:#D97706
+    style F fill:#FCE7F3,color:#111827,stroke:#DB2777
+    style G fill:#CCFBF1,color:#111827,stroke:#0F766E
+    style H fill:#E0F2FE,color:#111827,stroke:#0284C7
 ```
 
 ### New Evidence Response Shape (`POST /api/verify`)
@@ -382,6 +387,7 @@ graph LR
 ---
 
 ## 📁 Project Structure
+```text
 VeritasAI/
 │
 ├── 🐍 backend/
@@ -406,26 +412,27 @@ VeritasAI/
 │   └── 📰 data/
 │       └── news_articles.json     # Fact-checked article corpus
 │
-└── ⚛️  frontend/
-└── react-app/
-└── src/
-├── 📄 pages/
-│   ├── Home.jsx        # Claim submission + verdict
-│   ├── History.jsx     # Claims archive with filters
-│   ├── Graph.jsx       # Knowledge graph viewer
-│   ├── Stats.jsx       # Analytics dashboard
-│   └── Sources.jsx     # Trusted source registry page
-│
-├── 🧩 components/
-│   ├── VerdictBadge.jsx
-│   ├── ConfidenceMeter.jsx
-│   ├── PipelineVisualizer.jsx
-│   ├── AgentCard.jsx
-│   ├── EvidenceCard.jsx
-│   └── ThemeToggle.jsx
-│
-└── 🔌 services/
-└── api.js          # Axios API client
+└── ⚛️ frontend/
+    └── react-app/
+        └── src/
+            ├── 📄 pages/
+            │   ├── Home.jsx        # Claim submission + verdict
+            │   ├── History.jsx     # Claims archive with filters
+            │   ├── Graph.jsx       # Knowledge graph viewer
+            │   ├── Stats.jsx       # Analytics dashboard
+            │   └── Sources.jsx     # Trusted source registry page
+            │
+            ├── 🧩 components/
+            │   ├── VerdictBadge.jsx
+            │   ├── ConfidenceMeter.jsx
+            │   ├── PipelineVisualizer.jsx
+            │   ├── AgentCard.jsx
+            │   ├── EvidenceCard.jsx
+            │   └── ThemeToggle.jsx
+            │
+            └── 🔌 services/
+                └── api.js          # Axios API client
+```
 
 ---
 
