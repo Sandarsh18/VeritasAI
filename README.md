@@ -232,7 +232,10 @@ erDiagram
 | Feature | Description | Status |
 |---------|-------------|--------|
 | 🤖 **Multi-Agent Debate** | 3 AI agents argue opposing sides | ✅ Live |
-| 🔍 **RAG Evidence Engine** | FAISS vector search over article corpus | ✅ Live |
+| 🔍 **Hybrid RAG Evidence Engine** | Combines FAISS archive + real-time internet news | ✅ Live |
+| 🌐 **Real-Time News Fetching** | NewsAPI + GDELT + trusted RSS feeds | ✅ Live |
+| 🧾 **Full Source Attribution** | Publisher, author, date, URL, logo, source type per evidence | ✅ Live |
+| 🏛️ **Trusted Source Registry** | Curated credibility registry with `/api/sources` + UI page | ✅ Live |
 | 🧩 **Knowledge Graph** | Neo4j claim relationship memory | ✅ Live |
 | 💡 **Dynamic Confidence** | Evidence-based scoring, never hardcoded | ✅ Live |
 | ⚡ **Parallel Processing** | Prosecutor & Defender run simultaneously | ✅ Live |
@@ -343,7 +346,8 @@ graph LR
         D[GET /api/graph/id\nKnowledge graph]
         E[GET /api/stats\nAnalytics]
         F[GET /api/models\nAgent models]
-        G[GET /health\nSystem status]
+        G[GET /api/sources\nSource credibility registry]
+        H[GET /health\nSystem status]
     end
 
     style A fill:#6366f1,color:#fff
@@ -353,7 +357,12 @@ graph LR
     style E fill:#f59e0b,color:#fff
     style F fill:#ec4899,color:#fff
     style G fill:#14b8a6,color:#fff
+    style H fill:#0ea5e9,color:#fff
 ```
+
+### New Evidence Response Shape (`POST /api/verify`)
+- `evidence[]` now includes: `source`, `source_url`, `author`, `published_date`, `source_logo`, `source_type`, `relevance_score`, `combined_score`, `is_realtime`, `evidence_source`, `image_url`
+- `evidence_summary` includes: `total`, `realtime`, `archive`, `sources_used`, `avg_credibility`, `freshest_date`
 
 ---
 
@@ -367,7 +376,8 @@ graph LR
 | 🔄 Cached Claim | **< 2 seconds** |
 | 📉 Inference Reduction | **40 — 60%** via deduplication |
 | 🎲 Confidence Range | **30 — 97%** dynamic |
-| 📰 Articles in Corpus | **30+ fact-checked** |
+| 📰 Articles in Corpus | **30+ fact-checked (archive)** |
+| 🌐 Live Evidence Sources | **NewsAPI + GDELT + RSS** |
 
 ---
 
@@ -387,7 +397,8 @@ VeritasAI/
 │   ├── 🔍 rag/
 │   │   ├── embeddings.py          # Sentence Transformers
 │   │   ├── vector_store.py        # FAISS index build & search
-│   │   └── evidence_retriever.py  # Top-k article retrieval
+│   │   ├── realtime_fetcher.py    # Real-time news fetch + source credibility
+│   │   └── evidence_retriever.py  # Hybrid local + real-time retrieval
 │   │
 │   ├── 🕸️  graph/
 │   │   └── neo4j_client.py        # Knowledge graph operations
@@ -402,7 +413,8 @@ VeritasAI/
 │   ├── Home.jsx        # Claim submission + verdict
 │   ├── History.jsx     # Claims archive with filters
 │   ├── Graph.jsx       # Knowledge graph viewer
-│   └── Stats.jsx       # Analytics dashboard
+│   ├── Stats.jsx       # Analytics dashboard
+│   └── Sources.jsx     # Trusted source registry page
 │
 ├── 🧩 components/
 │   ├── VerdictBadge.jsx
@@ -450,7 +462,7 @@ VeritasAI/
 
 ## 🔮 Future Scope
 
-- [ ] 🌐 Real-time RSS news feed ingestion
+- [x] 🌐 Real-time RSS + API news ingestion
 - [ ] 📱 WhatsApp Business API integration
 - [ ] 🖼️ Deepfake image & video detection
 - [ ] 🎙️ Voice claim submission
