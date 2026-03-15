@@ -426,6 +426,28 @@ export default function Home() {
                 <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '1rem', opacity: 0.8 }}>
                   Retrieved Evidence ({result.evidence.length} articles)
                 </div>
+                {result.evidence_summary && (
+                  <div
+                    className="glass"
+                    style={{
+                      marginBottom: 12,
+                      border: '1px solid rgba(99,102,241,0.25)',
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: 5 }}>📰 Evidence Retrieved</div>
+                    <div style={{ fontSize: '0.88rem', opacity: 0.84, lineHeight: 1.55 }}>
+                      {result.evidence_summary.total || result.evidence.length} articles • {result.evidence_summary.realtime || 0} live • {result.evidence_summary.archive || 0} archived
+                    </div>
+                    <div style={{ fontSize: '0.84rem', opacity: 0.75, marginTop: 4 }}>
+                      Sources: {(result.evidence_summary.sources_used || []).join(', ') || 'Unknown'}
+                    </div>
+                    <div style={{ fontSize: '0.84rem', opacity: 0.75, marginTop: 2 }}>
+                      Avg credibility: {Math.round((result.evidence_summary.avg_credibility || 0) * 100)}% • Latest: {result.evidence_summary.freshest_date || 'Unknown'}
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
                   {result.evidence.map((ev, i) => (
                     <EvidenceCard key={ev.id || i} article={ev} index={i} delay={i * 0.1} />

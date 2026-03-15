@@ -1,125 +1,200 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import VerdictBadge from './VerdictBadge';
 
-const SOURCE_COLORS = {
-  'Reuters': '#ff8000',
-  'WHO': '#009edb',
-  'AFP': '#c41230',
-  'FactCheck.org': '#1a56db',
-  'PolitiFact': '#9c1b1b',
-  'Snopes': '#0057a5',
-};
+function scoreColor(score) {
+  if (score > 0.9) return '#10b981';
+  if (score >= 0.7) return '#f59e0b';
+  return '#fb923c';
+}
+
+function toPercent(value) {
+  return Math.max(0, Math.min(100, Math.round((value || 0) * 100)));
+}
 
 export default function EvidenceCard({ article, delay = 0 }) {
   const [expanded, setExpanded] = useState(false);
-  const credibility = article.credibility_score || 0;
-  const relevance = article.relevance_score ? Math.round(article.relevance_score * 100) : 0;
-  const sourceColor = SOURCE_COLORS[article.source] || '#6366f1';
+  const credibility = Number(article.credibility_score || 0);
+  const relevance = Number(article.relevance_score || 0);
+  const credibilityPct = toPercent(credibility);
+  const relevancePct = toPercent(relevance);
+  const credibilityColor = scoreColor(credibility);
 
-  const verdictColor = article.verdict === 'true' ? '#10b981'
-    : article.verdict === 'false' ? '#ef4444' : '#f59e0b';
+  const liveBadge = useMemo(() => {
+    if (article.is_realtime) {
+      return (
+        <motion.span
+          animate={{ opacity: [0.8, 1, 0.8] }}
+          transition={{ duration: 1.2, repeat: Infinity }}
+          style={{
+            background: 'rgba(16,185,129,0.16)',
+            border: '1px solid rgba(16,185,129,0.45)',
+            color: '#6ee7b7',
+            borderRadius: 999,
+            padding: '3px 10px',
+            fontWeight: 700,
+            fontSize: '0.7rem',
+          }}
+        >
+          🌐 LIVE
+        </motion.span>
+      );
+    }
+    return (
+      <span
+        style={{
+          background: 'rgba(148,163,184,0.15)',
+          border: '1px solid rgba(148,163,184,0.3)',
+          color: '#cbd5e1',
+          borderRadius: 999,
+          padding: '3px 10px',
+          fontWeight: 700,
+          fontSize: '0.7rem',
+        }}
+      >
+        📁 ARCHIVE
+      </span>
+    );
+  }, [article.is_realtime]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay, duration: 0.4 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.35 }}
       style={{
         background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.1)',
         borderRadius: 14,
         padding: '1rem',
-        backdropFilter: 'blur(20px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div style={{ flex: 1, paddingRight: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{
-              background: `${sourceColor}22`,
-              color: sourceColor,
-              border: `1px solid ${sourceColor}44`,
-              borderRadius: 6,
-              padding: '2px 8px',
-              fontSize: '0.7rem',
-              fontWeight: 700,
-            }}>{article.source}</span>
-            <span style={{
-              background: `${verdictColor}22`,
-              color: verdictColor,
-              border: `1px solid ${verdictColor}44`,
-              borderRadius: 6,
-              padding: '2px 8px',
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-            }}>{article.verdict}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 700 }}>{article.source_logo || '📰'} {article.source || 'Unknown'}</span>
+            <span style={{ fontSize: '0.72rem', opacity: 0.75 }}>{article.source_type || 'Unknown Source'}</span>
+            {liveBadge}
           </div>
-          <div style={{ fontWeight: 600, fontSize: '0.875rem', lineHeight: 1.4, opacity: 0.9 }}>
-            {article.title}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.7, fontSize: '0.78rem' }}>
+            <CalendarDays size={13} />
+            <span>{article.published_date || 'Unknown date'}</span>
           </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 60 }}>
-          <span style={{
-            background: 'rgba(99,102,241,0.2)',
-            color: '#a5b4fc',
-            borderRadius: 8,
-            padding: '3px 8px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-          }}>{relevance}%</span>
-          <span style={{ fontSize: '0.6rem', opacity: 0.5 }}>relevance</span>
         </div>
       </div>
 
-      {/* Credibility bar */}
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>Credibility</span>
-          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: credibility > 0.7 ? '#10b981' : credibility > 0.4 ? '#f59e0b' : '#ef4444' }}>
-            {Math.round(credibility * 100)}%
-          </span>
-        </div>
-        <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${credibility * 100}%` }}
-            transition={{ duration: 0.8, delay: delay + 0.2 }}
-            style={{
-              height: '100%',
-              borderRadius: 2,
-              background: credibility > 0.7 ? '#10b981' : credibility > 0.4 ? '#f59e0b' : '#ef4444',
-            }}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
+        <div style={{ fontWeight: 700, lineHeight: 1.45, marginBottom: 8 }}>{article.title}</div>
+
+        {article.image_url && (
+          <img
+            src={article.image_url}
+            alt={article.title || 'Article image'}
+            style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 10, marginBottom: 10 }}
           />
+        )}
+
+        <div style={{ fontStyle: 'italic', opacity: 0.82, fontSize: '0.82rem', marginBottom: 8 }}>
+          By {article.author || 'Staff Reporter'} • {article.source || 'Unknown'}
+        </div>
+
+        <div
+          style={{
+            fontSize: '0.85rem',
+            lineHeight: 1.55,
+            opacity: 0.78,
+            display: '-webkit-box',
+            WebkitLineClamp: expanded ? 'none' : 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {article.content || 'No content available.'}
+        </div>
+        <button
+          onClick={() => setExpanded((prev) => !prev)}
+          style={{
+            marginTop: 6,
+            border: 'none',
+            background: 'transparent',
+            color: '#a5b4fc',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: 0,
+            fontWeight: 600,
+            fontSize: '0.78rem',
+          }}
+        >
+          {expanded ? 'Show less' : 'Read more'}
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </button>
+      </div>
+
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'grid', gap: 8 }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: 4 }}>
+            <span>Credibility</span>
+            <span style={{ color: credibilityColor, fontWeight: 700 }}>{credibilityPct}%</span>
+          </div>
+          <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${credibilityPct}%` }}
+              transition={{ duration: 0.6, delay: delay + 0.1 }}
+              style={{ height: '100%', background: credibilityColor }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: 4 }}>
+            <span>Relevance</span>
+            <span style={{ color: '#a5b4fc', fontWeight: 700 }}>{relevancePct}%</span>
+          </div>
+          <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${relevancePct}%` }}
+              transition={{ duration: 0.6, delay: delay + 0.15 }}
+              style={{ height: '100%', background: '#6366f1' }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Excerpt */}
-      <div style={{
-        fontSize: '0.78rem',
-        opacity: 0.65,
-        lineHeight: 1.5,
-        display: '-webkit-box',
-        WebkitLineClamp: expanded ? 'none' : 2,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-        marginBottom: 6,
-      }}>
-        {article.content}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        {article.source_url ? (
+          <a
+            href={article.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'rgba(99,102,241,0.14)',
+              border: '1px solid rgba(99,102,241,0.35)',
+              borderRadius: 10,
+              padding: '7px 10px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: '#c7d2fe',
+            }}
+          >
+            <ExternalLink size={13} /> Read Full Article
+          </a>
+        ) : (
+          <span style={{ fontSize: '0.78rem', opacity: 0.65 }}>Source URL unavailable</span>
+        )}
+        <VerdictBadge verdict={article.verdict || 'UNVERIFIED'} size="small" />
       </div>
-
-      <button
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: '#6366f1', fontSize: '0.75rem', fontWeight: 600,
-          display: 'flex', alignItems: 'center', gap: 4, padding: 0,
-        }}
-      >
-        {expanded ? 'Show less' : 'Read more'}
-        {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-      </button>
     </motion.div>
   );
 }

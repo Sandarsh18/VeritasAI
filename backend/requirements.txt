@@ -10,3 +10,11 @@ python-dotenv
 pydantic
 numpy
 sqlalchemy
+newsapi-python
+newspaper3k
+lxml_html_clean
+feedparser
+httpx
+aiohttp
+beautifulsoup4
+requests-cache

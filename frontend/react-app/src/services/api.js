@@ -134,6 +134,11 @@ export const searchClaims = async (query, filters = {}) => {
   return res.data;
 };
 
+export const getSources = async () => {
+  const res = await api.get('/api/sources');
+  return res.data;
+};
+
 export const checkUsername = async (username) => {
   const res = await api.get('/api/auth/check-username', { params: { username } });
   return res.data;

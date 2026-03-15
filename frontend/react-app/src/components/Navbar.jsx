@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Shield, History, Network, BarChart3, Flame, Search } from 'lucide-react';
+import { Shield, History, Network, BarChart3, Flame, Search, LibraryBig } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { to: '/graph', label: 'Graph', icon: Network },
   { to: '/stats', label: 'Stats', icon: BarChart3 },
   { to: '/trending', label: 'Trending', icon: Flame },
+  { to: '/sources', label: 'Sources', icon: LibraryBig },
 ];
 
 export default function Navbar() {

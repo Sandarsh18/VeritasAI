@@ -16,6 +16,7 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Trending from './pages/Trending';
 import SharedClaim from './pages/SharedClaim';
+import Sources from './pages/Sources';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -37,6 +38,7 @@ function AnimatedRoutes() {
           <Route path="/graph" element={<Graph />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/trending" element={<Trending />} />
+          <Route path="/sources" element={<Sources />} />
           <Route path="/shared/:token" element={<SharedClaim />} />
         </Routes>
       </motion.div>

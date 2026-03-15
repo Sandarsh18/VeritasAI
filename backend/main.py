@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor, wait
+from datetime import datetime
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
+from dotenv import load_dotenv
 from pydantic import BaseModel
 import asyncio
 import json
@@ -16,6 +18,8 @@ import time
 
 from sqlalchemy.orm import Session
 
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from agents.claim_analyzer import analyze_claim, suggest_factual_claim
@@ -23,6 +27,7 @@ from agents.prosecutor import run_prosecutor
 from agents.defender import run_defender
 from agents.judge import run_judge
 from rag.evidence_retriever import retrieve_evidence
+from rag.realtime_fetcher import get_sources_registry
 from rag.vector_store import get_index
 from graph.neo4j_client import (
     store_claim,
@@ -155,6 +160,50 @@ def build_evidence_summary(evidence: list[dict]) -> str:
     )
 
 
+def _parse_article_date(value: str) -> datetime | None:
+    if not value:
+        return None
+    raw = value.strip()
+    for fmt in ("%d %B %Y", "%Y-%m-%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def build_evidence_metadata_summary(evidence: list[dict], realtime_count: int, archive_count: int) -> dict:
+    if not evidence:
+        return {
+            "total": 0,
+            "realtime": 0,
+            "archive": 0,
+            "sources_used": [],
+            "avg_credibility": 0,
+            "freshest_date": "Unknown",
+        }
+
+    sources_used = sorted({item.get("source", "Unknown") for item in evidence if item.get("source")})
+    avg_credibility = round(
+        sum(float(item.get("credibility_score", 0.5)) for item in evidence) / len(evidence), 2
+    )
+
+    newest = None
+    for item in evidence:
+        parsed = _parse_article_date(item.get("published_date", ""))
+        if parsed and (newest is None or parsed > newest):
+            newest = parsed
+
+    return {
+        "total": len(evidence),
+        "realtime": realtime_count,
+        "archive": archive_count,
+        "sources_used": sources_used,
+        "avg_credibility": avg_credibility,
+        "freshest_date": newest.strftime("%d %B %Y") if newest else "Unknown",
+    }
+
+
 async def persist_result(claim: str, verdict: str, confidence: int, evidence: list[dict]) -> str | int | None:
     claim_id = None
     try:
@@ -257,7 +306,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
 
     try:
         evidence_result = await asyncio.wait_for(
-            asyncio.to_thread(retrieve_evidence, claim, 5),
+            asyncio.to_thread(retrieve_evidence, claim),
             timeout=45,
         )
     except asyncio.TimeoutError:
@@ -280,6 +329,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
             "key_evidence": [],
             "claim_analysis": claim_analysis,
             "evidence": [],
+            "evidence_summary": build_evidence_metadata_summary([], 0, 0),
             "prosecutor": {"arguments": [], "strongest_point": "No relevant evidence"},
             "defender": {"arguments": [], "strongest_point": "No relevant evidence"},
             "pipeline_note": "Insufficient evidence",
@@ -289,6 +339,33 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
         return result
 
     evidence = evidence_result.get("articles", [])
+    realtime_count = int(evidence_result.get("realtime_count", sum(1 for item in evidence if item.get("is_realtime"))))
+    archive_count = int(evidence_result.get("archive_count", sum(1 for item in evidence if not item.get("is_realtime"))))
+
+    normalized_evidence = []
+    for article in evidence:
+        normalized_evidence.append(
+            {
+                "id": article.get("id", ""),
+                "title": article.get("title", ""),
+                "content": article.get("content", ""),
+                "source": article.get("source", "Unknown"),
+                "source_url": article.get("source_url", ""),
+                "author": article.get("author", "Staff Reporter"),
+                "published_date": article.get("published_date", "Unknown date"),
+                "credibility_score": float(article.get("credibility_score", 0.5)),
+                "source_logo": article.get("source_logo", "⚪"),
+                "source_type": article.get("source_type", "Unknown Source"),
+                "relevance_score": float(article.get("relevance_score", 0.0)),
+                "combined_score": float(article.get("combined_score", article.get("relevance_score", 0.0))),
+                "is_realtime": bool(article.get("is_realtime", False)),
+                "evidence_source": article.get("evidence_source", "archive"),
+                "image_url": article.get("image_url", ""),
+                "verdict": article.get("verdict", "UNVERIFIED"),
+            }
+        )
+    evidence = normalized_evidence
+    evidence_summary_meta = build_evidence_metadata_summary(evidence, realtime_count, archive_count)
 
     print(f"[{_ts()}] RAG done: {len(evidence)} articles")
 
@@ -340,6 +417,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
         "recommendation": judge_result.get("recommendation", ""),
         "claim_analysis": claim_analysis,
         "evidence": evidence,
+        "evidence_summary": evidence_summary_meta,
         "prosecutor": prosecutor_result,
         "defender": defender_result,
         "pipeline_note": "Full pipeline completed",
@@ -510,6 +588,13 @@ async def get_statistics():
                 "top_sources": [],
                 "error": str(exc),
             }
+
+
+@app.get("/api/sources")
+async def get_sources():
+    sources = get_sources_registry()
+    sources.sort(key=lambda item: item.get("score", 0), reverse=True)
+    return {"sources": sources}
 
 
 app.include_router(auth_router, prefix="/api")
