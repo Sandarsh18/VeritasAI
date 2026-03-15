@@ -5,7 +5,7 @@ import { Search, Zap, AlertCircle, Share2, Bookmark } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { bookmarkClaim, shareClaim, submitFeedback, verifyClaim } from '../services/api';
+import { bookmarkClaim, shareClaim, submitFeedback, suggestClaim, verifyClaim } from '../services/api';
 import PipelineVisualizer from '../components/PipelineVisualizer';
 import VerdictBadge from '../components/VerdictBadge';
 import ConfidenceMeter from '../components/ConfidenceMeter';
@@ -14,12 +14,35 @@ import EvidenceCard from '../components/EvidenceCard';
 import { TwitterShareButton, WhatsappShareButton, TwitterIcon, WhatsappIcon } from 'react-share';
 
 const SAMPLE_CLAIMS = [
-  "Drinking hot water cures COVID",
-  "Vaccines cause autism",
-  "5G towers spread coronavirus",
+  'COVID vaccines cause infertility',
+  '5G towers spread coronavirus',
+  'Drinking bleach cures COVID',
 ];
 
 const STEP_LABELS = ['Evidence Retrieval', 'Prosecutor Analysis', 'Defender Analysis', 'Judge Deliberation', 'Final Verdict'];
+
+const BANNER_STYLES = {
+  info: {
+    background: 'rgba(59,130,246,0.12)',
+    border: '1px solid rgba(59,130,246,0.28)',
+    color: '#bfdbfe',
+  },
+  warning: {
+    background: 'rgba(245,158,11,0.12)',
+    border: '1px solid rgba(245,158,11,0.28)',
+    color: '#fde68a',
+  },
+};
+
+function ResultBanner({ variant, title, message }) {
+  const style = BANNER_STYLES[variant] || BANNER_STYLES.info;
+  return (
+    <div style={{ ...style, borderRadius: 14, padding: '14px 16px', textAlign: 'left', maxWidth: 640, margin: '0 auto 1rem' }}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      <div style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>{message}</div>
+    </div>
+  );
+}
 
 export default function Home() {
   const { isLoading, setIsLoading, activeStep, setActiveStep, result, setResult } = useApp();
@@ -27,6 +50,7 @@ export default function Home() {
   const [claim, setClaim] = useState('');
   const [error, setError] = useState('');
   const [rating, setRating] = useState(0);
+  const [suggestion, setSuggestion] = useState(null);
 
   const handleVerify = useCallback(async (claimText) => {
     const text = (claimText || claim).trim();
@@ -65,6 +89,25 @@ export default function Home() {
       setIsLoading(false);
     }
   }, [claim, setIsLoading, setActiveStep, setResult]);
+
+  const handleClaimBlur = useCallback(async () => {
+    const text = claim.trim();
+    if (!text || text.length < 8) {
+      setSuggestion(null);
+      return;
+    }
+
+    try {
+      const data = await suggestClaim(text);
+      if (data?.type && data.type !== 'factual_claim' && data?.suggestion && data.suggestion.toLowerCase() !== text.toLowerCase()) {
+        setSuggestion(data);
+      } else {
+        setSuggestion(null);
+      }
+    } catch {
+      setSuggestion(null);
+    }
+  }, [claim]);
 
   // Ctrl+Enter shortcut
   useEffect(() => {
@@ -125,8 +168,8 @@ export default function Home() {
       >
         <textarea
           value={claim}
-          onChange={e => { setClaim(e.target.value); setError(''); }}
-          placeholder="Enter a news claim to verify... (e.g. 'Drinking lemon juice prevents COVID-19')"
+          onChange={e => { setClaim(e.target.value); setError(''); setSuggestion(null); }}
+          placeholder={"Enter a specific factual claim...\ne.g. 'Vaccines cause autism' or\n'5G towers spread coronavirus'"}
           disabled={isLoading}
           style={{
             width: '100%', minHeight: 110, resize: 'vertical',
@@ -139,8 +182,45 @@ export default function Home() {
             boxSizing: 'border-box',
           }}
           onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.5)'}
-          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+          onBlur={(e) => {
+            e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+            handleClaimBlur();
+          }}
         />
+
+        {suggestion?.suggestion && (
+          <div style={{
+            marginTop: 12,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            alignItems: 'center',
+            background: 'rgba(59,130,246,0.12)',
+            border: '1px solid rgba(59,130,246,0.24)',
+            borderRadius: 999,
+            padding: '10px 14px',
+            fontSize: '0.85rem',
+          }}>
+            <span style={{ color: '#bfdbfe' }}>💡 Did you mean: '{suggestion.suggestion}'?</span>
+            <button
+              onClick={() => {
+                setClaim(suggestion.suggestion);
+                setSuggestion(null);
+              }}
+              style={{
+                border: 'none',
+                borderRadius: 999,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.12)',
+                color: 'inherit',
+                fontWeight: 600,
+              }}
+            >
+              Use this →
+            </button>
+          </div>
+        )}
 
         {/* Sample claims */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '12px 0' }}>
@@ -248,6 +328,27 @@ export default function Home() {
               className="glass"
               style={{ padding: '2rem', textAlign: 'center', ...(result.verdict === 'FALSE' ? { boxShadow: '0 0 25px rgba(239,68,68,0.45)' } : result.verdict === 'MISLEADING' ? { boxShadow: '0 0 25px rgba(245,158,11,0.45)' } : {}) }}
             >
+              {result.claim_type === 'opinion' && (
+                <ResultBanner
+                  variant="info"
+                  title="💡 Opinion Detected"
+                  message="This looks like a subjective opinion rather than a fact-checkable claim. Try rewriting it as a measurable statement such as 'RVCE is ranked #1 in Karnataka by NIRF' instead."
+                />
+              )}
+              {result.claim_type === 'question' && (
+                <ResultBanner
+                  variant="info"
+                  title="💡 Question Detected"
+                  message="Try rephrasing this as a statement. Instead of 'Is X true?' write 'X is true' and then verify that claim."
+                />
+              )}
+              {result.pipeline_note === 'Insufficient evidence' && (
+                <ResultBanner
+                  variant="warning"
+                  title="⚠️ Limited Evidence"
+                  message="No relevant articles were found in the current database for this specific claim. The verdict is based on limited data."
+                />
+              )}
               <div style={{ marginBottom: '1.5rem' }}>
                 <VerdictBadge verdict={result.verdict} size="large" />
               </div>

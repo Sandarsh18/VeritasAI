@@ -2,7 +2,7 @@
   {
     "id": "health_001",
     "title": "COVID-19 Vaccines Do Not Alter Human DNA, Scientists Confirm",
-    "content": "Multiple peer-reviewed studies and statements from leading health organizations including the WHO, CDC, and FDA have confirmed that COVID-19 mRNA vaccines do not alter human DNA. The claim that mRNA vaccines integrate into a person's genome is biologically impossible under normal conditions. mRNA, or messenger RNA, is a transient molecule that degrades within hours to days after injection. It never enters the cell nucleus where DNA is housed. The mRNA instructs cells to produce spike proteins to trigger an immune response, then breaks down naturally. Reverse transcription — the process that would be needed to convert RNA into DNA — does not occur in normal human cells without specific viral enzymes that are not present in COVID-19 vaccines. This misinformation has been thoroughly debunked by molecular biologists, virologists, and immunologists worldwide. Studies published in journals such as Nature and The Lancet have repeatedly shown no genomic integration. Believing this myth can discourage vaccination, contributing to preventable deaths and prolonged pandemic duration.",
+    "content": "Multiple peer-reviewed studies and statements from leading health organizations including the WHO, CDC, and FDA have confirmed that COVID-19 mRNA vaccines do not alter human DNA. The claim that mRNA vaccines integrate into a person's genome is biologically impossible under normal conditions. mRNA, or messenger RNA, is a transient molecule that degrades within hours to days after injection. It never enters the cell nucleus where DNA is housed. The mRNA instructs cells to produce spike proteins to trigger an immune response, then breaks down naturally. Reverse transcription \u2014 the process that would be needed to convert RNA into DNA \u2014 does not occur in normal human cells without specific viral enzymes that are not present in COVID-19 vaccines. This misinformation has been thoroughly debunked by molecular biologists, virologists, and immunologists worldwide. Studies published in journals such as Nature and The Lancet have repeatedly shown no genomic integration. Believing this myth can discourage vaccination, contributing to preventable deaths and prolonged pandemic duration.",
     "source": "WHO",
     "credibility_score": 0.98,
     "category": "health",
@@ -42,7 +42,7 @@
   {
     "id": "health_005",
     "title": "Ivermectin Shows No Significant Benefit in Treating COVID-19, Landmark Trial Finds",
-    "content": "A large-scale randomized controlled trial known as the TOGETHER trial, conducted across multiple sites in Brazil, found that ivermectin — an antiparasitic drug — did not reduce the risk of hospitalization or death in patients with mild to moderate COVID-19. The trial enrolled over 3,500 high-risk adult outpatients and found no statistically significant benefit in the primary outcome. These findings were consistent with WHO guidance that recommended against ivermectin use outside of clinical trials for COVID-19. Despite widespread promotion of ivermectin on social media as a COVID-19 cure, multiple systematic reviews and rigorous trials have all failed to demonstrate meaningful clinical benefit. The FDA, EMA, and WHO have all issued statements discouraging its use for this purpose. The promotion of ivermectin as a COVID-19 treatment is considered misleading because, while some early low-quality studies suggested possible benefit, robust evidence from well-designed trials does not support its effectiveness.",
+    "content": "A large-scale randomized controlled trial known as the TOGETHER trial, conducted across multiple sites in Brazil, found that ivermectin \u2014 an antiparasitic drug \u2014 did not reduce the risk of hospitalization or death in patients with mild to moderate COVID-19. The trial enrolled over 3,500 high-risk adult outpatients and found no statistically significant benefit in the primary outcome. These findings were consistent with WHO guidance that recommended against ivermectin use outside of clinical trials for COVID-19. Despite widespread promotion of ivermectin on social media as a COVID-19 cure, multiple systematic reviews and rigorous trials have all failed to demonstrate meaningful clinical benefit. The FDA, EMA, and WHO have all issued statements discouraging its use for this purpose. The promotion of ivermectin as a COVID-19 treatment is considered misleading because, while some early low-quality studies suggested possible benefit, robust evidence from well-designed trials does not support its effectiveness.",
     "source": "Reuters",
     "credibility_score": 0.95,
     "category": "health",
@@ -52,7 +52,7 @@
   {
     "id": "health_006",
     "title": "Drinking Alkaline Water Does Not Cure Cancer",
-    "content": "Claims circulating widely on social media assert that drinking alkaline water can cure cancer by changing the body's pH balance. This claim is scientifically unfounded. The human body maintains blood pH within a very narrow range of approximately 7.35 to 7.45 through highly efficient buffer systems involving the lungs and kidneys. Drinking alkaline water does not significantly alter blood or tissue pH. If it did, the resulting condition — alkalosis — would be medically dangerous. Cancer tumors can create a locally acidic microenvironment, but altering this environment via dietary means is not supported by clinical evidence as a cancer treatment. Major cancer research institutions including the American Cancer Society, Cancer Research UK, and the National Cancer Institute have all stated there is no scientific evidence that drinking alkaline water treats or prevents cancer. Patients who forego evidence-based cancer treatment in favor of alkaline water risk allowing their cancer to progress to later, less treatable stages.",
+    "content": "Claims circulating widely on social media assert that drinking alkaline water can cure cancer by changing the body's pH balance. This claim is scientifically unfounded. The human body maintains blood pH within a very narrow range of approximately 7.35 to 7.45 through highly efficient buffer systems involving the lungs and kidneys. Drinking alkaline water does not significantly alter blood or tissue pH. If it did, the resulting condition \u2014 alkalosis \u2014 would be medically dangerous. Cancer tumors can create a locally acidic microenvironment, but altering this environment via dietary means is not supported by clinical evidence as a cancer treatment. Major cancer research institutions including the American Cancer Society, Cancer Research UK, and the National Cancer Institute have all stated there is no scientific evidence that drinking alkaline water treats or prevents cancer. Patients who forego evidence-based cancer treatment in favor of alkaline water risk allowing their cancer to progress to later, less treatable stages.",
     "source": "Snopes",
     "credibility_score": 0.96,
     "category": "health",
@@ -72,7 +72,7 @@
   {
     "id": "health_008",
     "title": "5G Towers Do Not Spread COVID-19 Virus",
-    "content": "The claim that 5G mobile networks are responsible for spreading or causing COVID-19 is entirely false and scientifically incoherent. Viruses are biological entities that require direct transmission through respiratory droplets, aerosols, or surface contact. Radio waves used in 5G telecommunications — which operate in frequency ranges between 600 MHz and 86 GHz — cannot carry, transmit, or create viruses. COVID-19 is caused by the SARS-CoV-2 coronavirus, which was identified and genetically sequenced by scientists in January 2020. Multiple countries that did not have any 5G infrastructure at the time, including many in sub-Saharan Africa and Southeast Asia, experienced COVID-19 outbreaks. This false claim led to arson attacks on telecommunications towers in the United Kingdom and assaults on telecom workers. Full Fact, FactCheck.org, and every major scientific body have categorically rejected this claim as misinformation with no factual basis.",
+    "content": "The claim that 5G mobile networks are responsible for spreading or causing COVID-19 is entirely false and scientifically incoherent. Viruses are biological entities that require direct transmission through respiratory droplets, aerosols, or surface contact. Radio waves used in 5G telecommunications \u2014 which operate in frequency ranges between 600 MHz and 86 GHz \u2014 cannot carry, transmit, or create viruses. COVID-19 is caused by the SARS-CoV-2 coronavirus, which was identified and genetically sequenced by scientists in January 2020. Multiple countries that did not have any 5G infrastructure at the time, including many in sub-Saharan Africa and Southeast Asia, experienced COVID-19 outbreaks. This false claim led to arson attacks on telecommunications towers in the United Kingdom and assaults on telecom workers. Full Fact, FactCheck.org, and every major scientific body have categorically rejected this claim as misinformation with no factual basis.",
     "source": "FactCheck.org",
     "credibility_score": 0.98,
     "category": "health",
@@ -82,7 +82,7 @@
   {
     "id": "politics_001",
     "title": "U.S. Electoral College System Explained: History and Function",
-    "content": "The United States Electoral College is a process established in Article II, Section 1 of the U.S. Constitution, modified by the 12th Amendment, for electing the President and Vice President. Each state receives a number of electors equal to its total congressional representation — House seats plus Senate seats. There are 538 total electoral votes, and a candidate must receive a majority of 270 to win the presidency. Most states use a winner-takes-all approach where the candidate who wins the popular vote in that state receives all of the state's electoral votes. Maine and Nebraska use a congressional district method. The Electoral College was created by the Founders as a compromise between election by Congress and election by popular vote. It has been criticized for allowing candidates to win the presidency without the national popular vote, which has occurred in the 2000 and 2016 elections.",
+    "content": "The United States Electoral College is a process established in Article II, Section 1 of the U.S. Constitution, modified by the 12th Amendment, for electing the President and Vice President. Each state receives a number of electors equal to its total congressional representation \u2014 House seats plus Senate seats. There are 538 total electoral votes, and a candidate must receive a majority of 270 to win the presidency. Most states use a winner-takes-all approach where the candidate who wins the popular vote in that state receives all of the state's electoral votes. Maine and Nebraska use a congressional district method. The Electoral College was created by the Founders as a compromise between election by Congress and election by popular vote. It has been criticized for allowing candidates to win the presidency without the national popular vote, which has occurred in the 2000 and 2016 elections.",
     "source": "Reuters",
     "credibility_score": 0.97,
     "category": "politics",
@@ -112,7 +112,7 @@
   {
     "id": "politics_004",
     "title": "Politicians Voting Record on Healthcare Bill Misrepresented in Viral Posts",
-    "content": "A series of viral social media posts claimed that a group of senators voted against a healthcare bill that would have expanded Medicaid coverage to millions of uninsured Americans. Fact-checkers found the posts were misleading in two important ways. First, the vote cited was on a procedural motion to advance debate, not on the final bill itself. Voting against advancing procedural debate does not necessarily mean a senator opposes the underlying legislation — procedural votes are often used for strategic reasons including negotiating amendments. Second, several senators cited in the posts had publicly stated support for aspects of the bill. PolitiFact rated this claim as mostly false because, while the underlying vote data was technically accurate, the characterization of senators opposing healthcare expansion based on a procedural vote was deceptive and lacked critical context.",
+    "content": "A series of viral social media posts claimed that a group of senators voted against a healthcare bill that would have expanded Medicaid coverage to millions of uninsured Americans. Fact-checkers found the posts were misleading in two important ways. First, the vote cited was on a procedural motion to advance debate, not on the final bill itself. Voting against advancing procedural debate does not necessarily mean a senator opposes the underlying legislation \u2014 procedural votes are often used for strategic reasons including negotiating amendments. Second, several senators cited in the posts had publicly stated support for aspects of the bill. PolitiFact rated this claim as mostly false because, while the underlying vote data was technically accurate, the characterization of senators opposing healthcare expansion based on a procedural vote was deceptive and lacked critical context.",
     "source": "PolitiFact",
     "credibility_score": 0.94,
     "category": "politics",
@@ -122,7 +122,7 @@
   {
     "id": "politics_005",
     "title": "NATO Alliance Article 5 Mutual Defense Clause Explained",
-    "content": "Article 5 of the North Atlantic Treaty, signed in 1949, is the cornerstone of the NATO alliance's collective defense principle. It states that an armed attack against one member state is considered an attack against all member states. In response to such an attack, each member nation is obligated to take action it deems necessary, including the use of armed force, to restore and maintain security in the North Atlantic area. Contrary to some claims, Article 5 does not automatically commit all NATO members to military action — each member retains discretion over how to respond. Article 5 has been invoked only once in NATO history, following the September 11, 2001 terrorist attacks against the United States, which led to NATO members contributing to operations in Afghanistan. The current 32 NATO member states are bound by this treaty obligation.",
+    "content": "Article 5 of the North Atlantic Treaty, signed in 1949, is the cornerstone of the NATO alliance's collective defense principle. It states that an armed attack against one member state is considered an attack against all member states. In response to such an attack, each member nation is obligated to take action it deems necessary, including the use of armed force, to restore and maintain security in the North Atlantic area. Contrary to some claims, Article 5 does not automatically commit all NATO members to military action \u2014 each member retains discretion over how to respond. Article 5 has been invoked only once in NATO history, following the September 11, 2001 terrorist attacks against the United States, which led to NATO members contributing to operations in Afghanistan. The current 32 NATO member states are bound by this treaty obligation.",
     "source": "Reuters",
     "credibility_score": 0.98,
     "category": "politics",
@@ -152,7 +152,7 @@
   {
     "id": "politics_008",
     "title": "Claim That Immigration Causes Higher Crime Rates Not Supported by Evidence",
-    "content": "The claim that immigrants — including undocumented immigrants — cause higher crime rates has been repeatedly examined by researchers and found to be unsupported by the available evidence. A comprehensive review of studies published in the Annual Review of Criminology found that immigrants are less likely to commit crimes than native-born citizens, and that increases in immigration are associated with decreases in violent and property crimes in many cities. Data from the Texas Department of Public Safety, one of the few states that tracks criminal convictions by immigration status, consistently shows that both legal immigrants and undocumented immigrants have lower conviction rates for most crimes compared to native-born U.S. citizens. The National Academies of Sciences reviewed extensive research and concluded that immigration does not increase crime. While individual high-profile cases involving immigrant perpetrators receive disproportionate media attention, these do not represent the broader statistical trend.",
+    "content": "The claim that immigrants \u2014 including undocumented immigrants \u2014 cause higher crime rates has been repeatedly examined by researchers and found to be unsupported by the available evidence. A comprehensive review of studies published in the Annual Review of Criminology found that immigrants are less likely to commit crimes than native-born citizens, and that increases in immigration are associated with decreases in violent and property crimes in many cities. Data from the Texas Department of Public Safety, one of the few states that tracks criminal convictions by immigration status, consistently shows that both legal immigrants and undocumented immigrants have lower conviction rates for most crimes compared to native-born U.S. citizens. The National Academies of Sciences reviewed extensive research and concluded that immigration does not increase crime. While individual high-profile cases involving immigrant perpetrators receive disproportionate media attention, these do not represent the broader statistical trend.",
     "source": "PolitiFact",
     "credibility_score": 0.93,
     "category": "politics",
@@ -162,7 +162,7 @@
   {
     "id": "science_001",
     "title": "97% of Climate Scientists Agree That Human-Caused Climate Change Is Real",
-    "content": "Multiple independent studies using different methodologies have consistently found that approximately 97 percent of actively publishing climate scientists agree that human activities are causing the current warming of the global climate. The most frequently cited study, published in Environmental Research Letters by Cook et al. (2013), analyzed 11,944 peer-reviewed climate science abstracts and found that 97.1 percent of papers that took a position endorsed the consensus that humans are causing global warming. Separate studies by Anderegg et al., Doran and Zimmerman, and others reached similar conclusions. The world's leading scientific organizations — including NASA, NOAA, the American Meteorological Society, the American Geophysical Union, the National Academy of Sciences, and their counterparts in over 40 other countries — have issued statements affirming this consensus. The IPCC Sixth Assessment Report (2021) described the evidence as unequivocal.",
+    "content": "Multiple independent studies using different methodologies have consistently found that approximately 97 percent of actively publishing climate scientists agree that human activities are causing the current warming of the global climate. The most frequently cited study, published in Environmental Research Letters by Cook et al. (2013), analyzed 11,944 peer-reviewed climate science abstracts and found that 97.1 percent of papers that took a position endorsed the consensus that humans are causing global warming. Separate studies by Anderegg et al., Doran and Zimmerman, and others reached similar conclusions. The world's leading scientific organizations \u2014 including NASA, NOAA, the American Meteorological Society, the American Geophysical Union, the National Academy of Sciences, and their counterparts in over 40 other countries \u2014 have issued statements affirming this consensus. The IPCC Sixth Assessment Report (2021) described the evidence as unequivocal.",
     "source": "Reuters",
     "credibility_score": 0.99,
     "category": "science",
@@ -192,7 +192,7 @@
   {
     "id": "science_004",
     "title": "Antarctic Ice Sheet Is Losing Mass at Accelerating Rate, Satellite Data Shows",
-    "content": "Data from NASA's GRACE and GRACE-FO satellite missions, which measure gravitational variations to track changes in ice mass, confirm that the Antarctic Ice Sheet has been losing ice mass at an accelerating rate. Between 1992 and 2017, Antarctica lost approximately 2,720 billion tonnes of ice, contributing about 7.6 millimeters to global sea level rise. A comprehensive multi-institute study published in Nature found that the rate of ice loss tripled between 1992–2002 and 2012–2017. The West Antarctic Ice Sheet and parts of the East Antarctic Ice Sheet are most vulnerable, with marine ice sheet instability identified as a potential tipping point. These findings are consistent with predictions from climate models. While seasonal variation and some regions experiencing localized ice gain exist, the overall trend of accelerating mass loss is well established and represents a significant contribution to ongoing global sea level rise.",
+    "content": "Data from NASA's GRACE and GRACE-FO satellite missions, which measure gravitational variations to track changes in ice mass, confirm that the Antarctic Ice Sheet has been losing ice mass at an accelerating rate. Between 1992 and 2017, Antarctica lost approximately 2,720 billion tonnes of ice, contributing about 7.6 millimeters to global sea level rise. A comprehensive multi-institute study published in Nature found that the rate of ice loss tripled between 1992\u20132002 and 2012\u20132017. The West Antarctic Ice Sheet and parts of the East Antarctic Ice Sheet are most vulnerable, with marine ice sheet instability identified as a potential tipping point. These findings are consistent with predictions from climate models. While seasonal variation and some regions experiencing localized ice gain exist, the overall trend of accelerating mass loss is well established and represents a significant contribution to ongoing global sea level rise.",
     "source": "Reuters",
     "credibility_score": 0.98,
     "category": "science",
@@ -202,7 +202,7 @@
   {
     "id": "science_005",
     "title": "GMO Foods Approved for Human Consumption Are Safe to Eat, Scientific Consensus Shows",
-    "content": "A comprehensive report by the National Academies of Sciences, Engineering, and Medicine — the most thorough study of GMOs at the time of its publication in 2016 — examined more than 900 studies and found no substantiated evidence that genetically engineered foods currently on the market are less safe to eat than conventionally bred crops. This conclusion is supported by the WHO, the American Medical Association, the European Commission (which funded more than 130 research projects on GMO safety), and virtually every major scientific and regulatory body that has reviewed the evidence. Claims that GMOs cause cancer, allergies, or organ damage have not been supported by rigorous scientific evidence. The European Food Safety Authority independently reviews each GMO before approval. While legitimate debates exist about the ecological, economic, and social impacts of GMO agriculture, the safety of approved GMO foods for human consumption has a strong scientific consensus comparable to that for vaccine safety and human-caused climate change.",
+    "content": "A comprehensive report by the National Academies of Sciences, Engineering, and Medicine \u2014 the most thorough study of GMOs at the time of its publication in 2016 \u2014 examined more than 900 studies and found no substantiated evidence that genetically engineered foods currently on the market are less safe to eat than conventionally bred crops. This conclusion is supported by the WHO, the American Medical Association, the European Commission (which funded more than 130 research projects on GMO safety), and virtually every major scientific and regulatory body that has reviewed the evidence. Claims that GMOs cause cancer, allergies, or organ damage have not been supported by rigorous scientific evidence. The European Food Safety Authority independently reviews each GMO before approval. While legitimate debates exist about the ecological, economic, and social impacts of GMO agriculture, the safety of approved GMO foods for human consumption has a strong scientific consensus comparable to that for vaccine safety and human-caused climate change.",
     "source": "WHO",
     "credibility_score": 0.96,
     "category": "science",
@@ -212,7 +212,7 @@
   {
     "id": "science_006",
     "title": "Homeopathy Has No Scientific Evidence of Effectiveness Beyond Placebo",
-    "content": "Homeopathy, a practice developed in the late 18th century based on the concept that 'like cures like' and that extreme dilutions of substances gain healing power, has been extensively studied and found to have no scientific basis and no clinical effectiveness beyond placebo. The core claim of homeopathy — that water retains a 'memory' of substances it once contained — is incompatible with basic chemistry and physics. At the dilutions used in homeopathy (often 30C, meaning diluted by a factor of 10 to the 60th power), no molecules of the original substance remain. The Australian National Health and Medical Research Council conducted the most comprehensive systematic review of homeopathy in 2015 and found no good quality evidence that homeopathy was effective for any health condition. The UK's National Institute for Health and Care Excellence does not recommend homeopathic treatments on the NHS. Patients who rely on homeopathy in lieu of evidence-based treatments for serious conditions risk harm from delayed or forgone treatment.",
+    "content": "Homeopathy, a practice developed in the late 18th century based on the concept that 'like cures like' and that extreme dilutions of substances gain healing power, has been extensively studied and found to have no scientific basis and no clinical effectiveness beyond placebo. The core claim of homeopathy \u2014 that water retains a 'memory' of substances it once contained \u2014 is incompatible with basic chemistry and physics. At the dilutions used in homeopathy (often 30C, meaning diluted by a factor of 10 to the 60th power), no molecules of the original substance remain. The Australian National Health and Medical Research Council conducted the most comprehensive systematic review of homeopathy in 2015 and found no good quality evidence that homeopathy was effective for any health condition. The UK's National Institute for Health and Care Excellence does not recommend homeopathic treatments on the NHS. Patients who rely on homeopathy in lieu of evidence-based treatments for serious conditions risk harm from delayed or forgone treatment.",
     "source": "Snopes",
     "credibility_score": 0.97,
     "category": "science",
@@ -232,7 +232,7 @@
   {
     "id": "science_008",
     "title": "Sugar Does Not Cause Hyperactivity in Children, Research Shows",
-    "content": "Despite being a widely held belief by parents, the claim that sugar causes hyperactivity in children is not supported by scientific evidence. A comprehensive meta-analysis of 23 double-blind randomized controlled trials published in JAMA (Journal of the American Medical Association) found that sugar does not affect the behavior or cognitive performance of children, including those with Attention Deficit Hyperactivity Disorder (ADHD) or who are considered 'sugar-sensitive' by their parents. The perception that children become hyperactive after consuming sugar is likely explained by the placebo effect and contextual expectations — children consume sugar at parties and celebrations, which are already exciting environments. Research consistently shows that parents who believe their child consumed sugar rate the child as more hyperactive even when the child received a sugar-free placebo. This myth, though harmless in most contexts, illustrates how strongly held beliefs can persist in the face of contrary scientific evidence.",
+    "content": "Despite being a widely held belief by parents, the claim that sugar causes hyperactivity in children is not supported by scientific evidence. A comprehensive meta-analysis of 23 double-blind randomized controlled trials published in JAMA (Journal of the American Medical Association) found that sugar does not affect the behavior or cognitive performance of children, including those with Attention Deficit Hyperactivity Disorder (ADHD) or who are considered 'sugar-sensitive' by their parents. The perception that children become hyperactive after consuming sugar is likely explained by the placebo effect and contextual expectations \u2014 children consume sugar at parties and celebrations, which are already exciting environments. Research consistently shows that parents who believe their child consumed sugar rate the child as more hyperactive even when the child received a sugar-free placebo. This myth, though harmless in most contexts, illustrates how strongly held beliefs can persist in the face of contrary scientific evidence.",
     "source": "FactCheck.org",
     "credibility_score": 0.95,
     "category": "science",
@@ -242,7 +242,7 @@
   {
     "id": "technology_001",
     "title": "5G Radiation Does Not Cause Cancer, Health Authorities Confirm",
-    "content": "Health authorities including the WHO, the International Commission on Non-Ionizing Radiation Protection (ICNIRP), and national health agencies worldwide have concluded that 5G electromagnetic fields, when operated within established safety guidelines, do not pose a health risk including cancer. 5G technology uses non-ionizing radio waves, which do not have sufficient energy to break chemical bonds or remove electrons from atoms — the mechanism by which ionizing radiation such as X-rays causes cellular DNA damage. The radio frequencies used by 5G (ranging from sub-6 GHz to millimeter wave bands up to approximately 100 GHz) have been extensively studied. While millimeter waves penetrate less deeply into tissue than lower frequencies, they have not been shown to cause cancer or other adverse health effects at the power levels used in telecommunications. The IARC (International Agency for Research on Cancer) classifies radiofrequency electromagnetic fields as possibly carcinogenic (Group 2B), the same classification as coffee and pickled vegetables — based on limited and inconsistent evidence.",
+    "content": "Health authorities including the WHO, the International Commission on Non-Ionizing Radiation Protection (ICNIRP), and national health agencies worldwide have concluded that 5G electromagnetic fields, when operated within established safety guidelines, do not pose a health risk including cancer. 5G technology uses non-ionizing radio waves, which do not have sufficient energy to break chemical bonds or remove electrons from atoms \u2014 the mechanism by which ionizing radiation such as X-rays causes cellular DNA damage. The radio frequencies used by 5G (ranging from sub-6 GHz to millimeter wave bands up to approximately 100 GHz) have been extensively studied. While millimeter waves penetrate less deeply into tissue than lower frequencies, they have not been shown to cause cancer or other adverse health effects at the power levels used in telecommunications. The IARC (International Agency for Research on Cancer) classifies radiofrequency electromagnetic fields as possibly carcinogenic (Group 2B), the same classification as coffee and pickled vegetables \u2014 based on limited and inconsistent evidence.",
     "source": "WHO",
     "credibility_score": 0.97,
     "category": "technology",
@@ -262,7 +262,7 @@
   {
     "id": "technology_003",
     "title": "Quantum Computing Does Not Yet Break Modern Encryption",
-    "content": "Claims that quantum computers have already broken or can currently break the encryption protecting banking, government communications, and the internet are false. While quantum computers theoretically pose a long-term threat to certain encryption algorithms — specifically RSA and ECC public-key cryptography, which could be broken by a sufficiently large quantum computer running Shor's algorithm — no quantum computer currently exists with enough stable qubits to threaten current encryption standards. As of 2024, the most advanced quantum computers from IBM, Google, and others have reached around 1,000+ physical qubits, but breaking 2048-bit RSA encryption would require millions of error-corrected logical qubits — a capability decades away by most expert estimates. NIST (National Institute of Standards and Technology) has already standardized post-quantum cryptography algorithms designed to be resistant to quantum attacks. The long-term threat is real and taken seriously, but the near-term threat to current encryption is not.",
+    "content": "Claims that quantum computers have already broken or can currently break the encryption protecting banking, government communications, and the internet are false. While quantum computers theoretically pose a long-term threat to certain encryption algorithms \u2014 specifically RSA and ECC public-key cryptography, which could be broken by a sufficiently large quantum computer running Shor's algorithm \u2014 no quantum computer currently exists with enough stable qubits to threaten current encryption standards. As of 2024, the most advanced quantum computers from IBM, Google, and others have reached around 1,000+ physical qubits, but breaking 2048-bit RSA encryption would require millions of error-corrected logical qubits \u2014 a capability decades away by most expert estimates. NIST (National Institute of Standards and Technology) has already standardized post-quantum cryptography algorithms designed to be resistant to quantum attacks. The long-term threat is real and taken seriously, but the near-term threat to current encryption is not.",
     "source": "AFP",
     "credibility_score": 0.94,
     "category": "technology",
@@ -292,7 +292,7 @@
   {
     "id": "technology_006",
     "title": "Facial Recognition Technology Shown to Have Higher Error Rates for Darker-Skinned Individuals",
-    "content": "Research by MIT Media Lab researcher Joy Buolamwini and colleagues published in the study 'Gender Shades' (2018) demonstrated that commercial facial recognition systems from major technology companies showed significantly higher error rates when identifying the gender of darker-skinned individuals, particularly darker-skinned women, compared to lighter-skinned men. The best-performing system had an error rate of 0.8 percent for lighter-skinned men but 34.7 percent for darker-skinned women — a difference of more than 34 percentage points. Subsequent research has confirmed these disparities in accuracy across different facial recognition applications. NIST (National Institute of Standards and Technology) conducted a large-scale evaluation in 2019 finding that many algorithms showed higher false positive rates for African American and Asian faces compared to Caucasian faces. These documented disparities have significant implications for the use of facial recognition in law enforcement, hiring, and security contexts, where errors can have serious consequences for individuals misidentified.",
+    "content": "Research by MIT Media Lab researcher Joy Buolamwini and colleagues published in the study 'Gender Shades' (2018) demonstrated that commercial facial recognition systems from major technology companies showed significantly higher error rates when identifying the gender of darker-skinned individuals, particularly darker-skinned women, compared to lighter-skinned men. The best-performing system had an error rate of 0.8 percent for lighter-skinned men but 34.7 percent for darker-skinned women \u2014 a difference of more than 34 percentage points. Subsequent research has confirmed these disparities in accuracy across different facial recognition applications. NIST (National Institute of Standards and Technology) conducted a large-scale evaluation in 2019 finding that many algorithms showed higher false positive rates for African American and Asian faces compared to Caucasian faces. These documented disparities have significant implications for the use of facial recognition in law enforcement, hiring, and security contexts, where errors can have serious consequences for individuals misidentified.",
     "source": "AFP",
     "credibility_score": 0.96,
     "category": "technology",
@@ -302,9 +302,9 @@
   {
     "id": "technology_007",
     "title": "Claim That Phones Are Always Listening to Conversations for Ads Not Substantiated",
-    "content": "The widely held belief that smartphones continuously record ambient conversations to serve targeted advertisements is not substantiated by technical investigations or credible evidence. Security researchers and journalists at organizations including Gizmodo and WIRED have conducted extensive experiments, deliberately speaking specific trigger words near phones and monitoring network traffic, without finding evidence that audio data was being transmitted. Researchers at Northeastern University ran controlled experiments for 17,000 hours testing whether popular apps activated microphones unprompted and found no evidence of secret audio collection. The more likely explanation for the eerie feeling that phones 'heard' a conversation is confirmation bias — users notice ads related to things they've discussed but ignore the much larger number of irrelevant ads, and they don't realize the sophistication of interest inference from browsing behavior, location data, and social connections. While companies do collect vast amounts of behavioral data, continuous audio surveillance would require significant battery, bandwidth, and storage resources that would be detectable.",
+    "content": "The widely held belief that smartphones continuously record ambient conversations to serve targeted advertisements is not substantiated by technical investigations or credible evidence. Security researchers and journalists at organizations including Gizmodo and WIRED have conducted extensive experiments, deliberately speaking specific trigger words near phones and monitoring network traffic, without finding evidence that audio data was being transmitted. Researchers at Northeastern University ran controlled experiments for 17,000 hours testing whether popular apps activated microphones unprompted and found no evidence of secret audio collection. The more likely explanation for the eerie feeling that phones 'heard' a conversation is confirmation bias \u2014 users notice ads related to things they've discussed but ignore the much larger number of irrelevant ads, and they don't realize the sophistication of interest inference from browsing behavior, location data, and social connections. While companies do collect vast amounts of behavioral data, continuous audio surveillance would require significant battery, bandwidth, and storage resources that would be detectable.",
     "source": "Snopes",
-    "credibility_score": 0.90,
+    "credibility_score": 0.9,
     "category": "technology",
     "verdict": "misleading",
     "date": "2022-11-30"
@@ -312,7 +312,7 @@
   {
     "id": "technology_008",
     "title": "Major Data Breaches Expose Billions of Credentials Annually, Security Reports Show",
-    "content": "Annual cybersecurity reports from IBM, Verizon, and independent researchers consistently document that billions of personal credentials — including usernames, passwords, email addresses, and financial information — are stolen and exposed through data breaches each year. The Verizon Data Breach Investigations Report (DBIR) for 2023 analyzed over 16,312 security incidents and 5,199 confirmed data breaches. The IBM Cost of a Data Breach Report 2023 found that the average cost of a data breach globally reached $4.45 million, a record high. Notable breaches in recent years include incidents at Yahoo (3 billion accounts), LinkedIn (700 million records), Facebook (533 million records), and hundreds of healthcare organizations. These breaches are well-documented with evidence from dark web monitoring, security research, and company disclosures required by law in many jurisdictions. Password reuse across sites makes these breaches particularly dangerous, as stolen credentials from one breach can be used to access other services.",
+    "content": "Annual cybersecurity reports from IBM, Verizon, and independent researchers consistently document that billions of personal credentials \u2014 including usernames, passwords, email addresses, and financial information \u2014 are stolen and exposed through data breaches each year. The Verizon Data Breach Investigations Report (DBIR) for 2023 analyzed over 16,312 security incidents and 5,199 confirmed data breaches. The IBM Cost of a Data Breach Report 2023 found that the average cost of a data breach globally reached $4.45 million, a record high. Notable breaches in recent years include incidents at Yahoo (3 billion accounts), LinkedIn (700 million records), Facebook (533 million records), and hundreds of healthcare organizations. These breaches are well-documented with evidence from dark web monitoring, security research, and company disclosures required by law in many jurisdictions. Password reuse across sites makes these breaches particularly dangerous, as stolen credentials from one breach can be used to access other services.",
     "source": "Reuters",
     "credibility_score": 0.97,
     "category": "technology",
@@ -327,7 +327,13 @@
     "credibility_score": 0.96,
     "category": "education",
     "verdict": "misleading",
-    "keywords": ["NIRF", "RVCE", "Karnataka", "engineering rankings", "college ranking"],
+    "keywords": [
+      "NIRF",
+      "RVCE",
+      "Karnataka",
+      "engineering rankings",
+      "college ranking"
+    ],
     "date": "2024-08-12"
   },
   {
@@ -338,7 +344,13 @@
     "credibility_score": 0.89,
     "category": "education",
     "verdict": "misleading",
-    "keywords": ["IIT", "IIM", "private colleges", "placements", "higher education"],
+    "keywords": [
+      "IIT",
+      "IIM",
+      "private colleges",
+      "placements",
+      "higher education"
+    ],
     "date": "2024-06-03"
   },
   {
@@ -349,7 +361,13 @@
     "credibility_score": 0.88,
     "category": "education",
     "verdict": "misleading",
-    "keywords": ["RVCE", "best college", "Karnataka", "engineering colleges", "rankings"],
+    "keywords": [
+      "RVCE",
+      "best college",
+      "Karnataka",
+      "engineering colleges",
+      "rankings"
+    ],
     "date": "2024-07-19"
   },
   {
@@ -360,7 +378,13 @@
     "credibility_score": 0.97,
     "category": "education",
     "verdict": "true",
-    "keywords": ["distance education", "UGC", "online degree", "degree validity", "India"],
+    "keywords": [
+      "distance education",
+      "UGC",
+      "online degree",
+      "degree validity",
+      "India"
+    ],
     "date": "2024-02-14"
   },
   {
@@ -371,7 +395,13 @@
     "credibility_score": 0.87,
     "category": "education",
     "verdict": "misleading",
-    "keywords": ["online certification", "formal degree", "skills", "employment", "education"],
+    "keywords": [
+      "online certification",
+      "formal degree",
+      "skills",
+      "employment",
+      "education"
+    ],
     "date": "2024-04-08"
   },
   {
@@ -382,7 +412,13 @@
     "credibility_score": 0.94,
     "category": "technology",
     "verdict": "misleading",
-    "keywords": ["AI jobs", "automation", "labor market", "replacement", "workforce"],
+    "keywords": [
+      "AI jobs",
+      "automation",
+      "labor market",
+      "replacement",
+      "workforce"
+    ],
     "date": "2024-05-27"
   },
   {
@@ -393,7 +429,13 @@
     "credibility_score": 0.96,
     "category": "technology",
     "verdict": "false",
-    "keywords": ["smartphones", "cancer", "radiation", "mobile phones", "health"],
+    "keywords": [
+      "smartphones",
+      "cancer",
+      "radiation",
+      "mobile phones",
+      "health"
+    ],
     "date": "2024-01-30"
   },
   {
@@ -404,7 +446,13 @@
     "credibility_score": 0.88,
     "category": "technology",
     "verdict": "misleading",
-    "keywords": ["social media", "depression", "mental health", "adolescents", "misinformation"],
+    "keywords": [
+      "social media",
+      "depression",
+      "mental health",
+      "adolescents",
+      "misinformation"
+    ],
     "date": "2024-03-21"
   },
   {
@@ -415,7 +463,13 @@
     "credibility_score": 0.93,
     "category": "technology",
     "verdict": "false",
-    "keywords": ["ChatGPT", "sentient", "AI consciousness", "LLM", "chatbot"],
+    "keywords": [
+      "ChatGPT",
+      "sentient",
+      "AI consciousness",
+      "LLM",
+      "chatbot"
+    ],
     "date": "2024-06-11"
   },
   {
@@ -426,7 +480,13 @@
     "credibility_score": 0.96,
     "category": "technology",
     "verdict": "misleading",
-    "keywords": ["quantum computing", "encryption", "RSA", "NIST", "cybersecurity"],
+    "keywords": [
+      "quantum computing",
+      "encryption",
+      "RSA",
+      "NIST",
+      "cybersecurity"
+    ],
     "date": "2024-07-04"
   },
   {
@@ -437,7 +497,13 @@
     "credibility_score": 0.9,
     "category": "health",
     "verdict": "false",
-    "keywords": ["Ayurveda", "cancer", "India", "traditional medicine", "oncology"],
+    "keywords": [
+      "Ayurveda",
+      "cancer",
+      "India",
+      "traditional medicine",
+      "oncology"
+    ],
     "date": "2024-02-06"
   },
   {
@@ -448,7 +514,13 @@
     "credibility_score": 0.9,
     "category": "health",
     "verdict": "false",
-    "keywords": ["cow urine", "COVID", "India", "cure", "myth"],
+    "keywords": [
+      "cow urine",
+      "COVID",
+      "India",
+      "cure",
+      "myth"
+    ],
     "date": "2024-01-18"
   },
   {
@@ -459,7 +531,13 @@
     "credibility_score": 0.86,
     "category": "health",
     "verdict": "misleading",
-    "keywords": ["Indian diet", "diabetes", "nutrition", "prevention", "health"],
+    "keywords": [
+      "Indian diet",
+      "diabetes",
+      "nutrition",
+      "prevention",
+      "health"
+    ],
     "date": "2024-03-12"
   },
   {
@@ -470,7 +548,13 @@
     "credibility_score": 0.91,
     "category": "health",
     "verdict": "misleading",
-    "keywords": ["homeopathy", "placebo", "medical evidence", "India", "treatment"],
+    "keywords": [
+      "homeopathy",
+      "placebo",
+      "medical evidence",
+      "India",
+      "treatment"
+    ],
     "date": "2024-05-05"
   },
   {
@@ -481,7 +565,13 @@
     "credibility_score": 0.95,
     "category": "health",
     "verdict": "false",
-    "keywords": ["generic medicines", "branded drugs", "bioequivalence", "India", "pharmacy"],
+    "keywords": [
+      "generic medicines",
+      "branded drugs",
+      "bioequivalence",
+      "India",
+      "pharmacy"
+    ],
     "date": "2024-04-29"
   },
   {
@@ -492,7 +582,13 @@
     "credibility_score": 0.98,
     "category": "health",
     "verdict": "false",
-    "keywords": ["COVID vaccines", "infertility", "fertility", "pregnancy", "myth"],
+    "keywords": [
+      "COVID vaccines",
+      "infertility",
+      "fertility",
+      "pregnancy",
+      "myth"
+    ],
     "date": "2024-02-22"
   },
   {
@@ -503,7 +599,13 @@
     "credibility_score": 0.89,
     "category": "politics",
     "verdict": "false",
-    "keywords": ["EVM", "election tampering", "India elections", "VVPAT", "fraud"],
+    "keywords": [
+      "EVM",
+      "election tampering",
+      "India elections",
+      "VVPAT",
+      "fraud"
+    ],
     "date": "2024-05-02"
   },
   {
@@ -514,7 +616,13 @@
     "credibility_score": 0.94,
     "category": "politics",
     "verdict": "misleading",
-    "keywords": ["demonetization", "black money", "RBI", "India economy", "policy"],
+    "keywords": [
+      "demonetization",
+      "black money",
+      "RBI",
+      "India economy",
+      "policy"
+    ],
     "date": "2024-02-10"
   },
   {
@@ -525,7 +633,13 @@
     "credibility_score": 0.87,
     "category": "politics",
     "verdict": "misleading",
-    "keywords": ["CAA", "citizenship", "India", "law", "misinformation"],
+    "keywords": [
+      "CAA",
+      "citizenship",
+      "India",
+      "law",
+      "misinformation"
+    ],
     "date": "2024-03-16"
   },
   {
@@ -536,7 +650,13 @@
     "credibility_score": 0.86,
     "category": "politics",
     "verdict": "misleading",
-    "keywords": ["India GDP", "statistics", "economy", "data quality", "methodology"],
+    "keywords": [
+      "India GDP",
+      "statistics",
+      "economy",
+      "data quality",
+      "methodology"
+    ],
     "date": "2024-06-01"
   },
   {
@@ -547,7 +667,13 @@
     "credibility_score": 0.88,
     "category": "politics",
     "verdict": "misleading",
-    "keywords": ["free speech", "India", "internet shutdowns", "journalism", "rights"],
+    "keywords": [
+      "free speech",
+      "India",
+      "internet shutdowns",
+      "journalism",
+      "rights"
+    ],
     "date": "2024-07-09"
   },
   {
@@ -558,7 +684,13 @@
     "credibility_score": 0.9,
     "category": "environment",
     "verdict": "misleading",
-    "keywords": ["Ganga", "Namami Gange", "pollution", "river cleanup", "India"],
+    "keywords": [
+      "Ganga",
+      "Namami Gange",
+      "pollution",
+      "river cleanup",
+      "India"
+    ],
     "date": "2024-04-17"
   },
   {
@@ -569,7 +701,13 @@
     "credibility_score": 0.97,
     "category": "environment",
     "verdict": "false",
-    "keywords": ["electric vehicles", "pollution", "lifecycle emissions", "battery", "climate"],
+    "keywords": [
+      "electric vehicles",
+      "pollution",
+      "lifecycle emissions",
+      "battery",
+      "climate"
+    ],
     "date": "2024-05-09"
   },
   {
@@ -580,7 +718,13 @@
     "credibility_score": 0.94,
     "category": "environment",
     "verdict": "false",
-    "keywords": ["solar energy", "reliability", "grid", "storage", "India power"],
+    "keywords": [
+      "solar energy",
+      "reliability",
+      "grid",
+      "storage",
+      "India power"
+    ],
     "date": "2024-06-24"
   },
   {
@@ -591,7 +735,13 @@
     "credibility_score": 0.91,
     "category": "environment",
     "verdict": "misleading",
-    "keywords": ["India climate targets", "renewable energy", "coal", "emissions", "policy"],
+    "keywords": [
+      "India climate targets",
+      "renewable energy",
+      "coal",
+      "emissions",
+      "policy"
+    ],
     "date": "2024-07-28"
   },
   {
@@ -602,7 +752,13 @@
     "credibility_score": 0.85,
     "category": "environment",
     "verdict": "misleading",
-    "keywords": ["air purifiers", "pollution", "PM2.5", "indoor air", "India"],
+    "keywords": [
+      "air purifiers",
+      "pollution",
+      "PM2.5",
+      "indoor air",
+      "India"
+    ],
     "date": "2024-01-11"
   },
   {
@@ -613,7 +769,13 @@
     "credibility_score": 0.99,
     "category": "science",
     "verdict": "true",
-    "keywords": ["Chandrayaan-3", "ISRO", "Moon", "south pole", "space"],
+    "keywords": [
+      "Chandrayaan-3",
+      "ISRO",
+      "Moon",
+      "south pole",
+      "space"
+    ],
     "date": "2024-01-04"
   },
   {
@@ -624,7 +786,13 @@
     "credibility_score": 0.86,
     "category": "science",
     "verdict": "misleading",
-    "keywords": ["ISRO", "success rate", "launch failure", "space program", "India"],
+    "keywords": [
+      "ISRO",
+      "success rate",
+      "launch failure",
+      "space program",
+      "India"
+    ],
     "date": "2024-03-03"
   },
   {
@@ -635,7 +803,13 @@
     "credibility_score": 0.95,
     "category": "science",
     "verdict": "true",
-    "keywords": ["Indian scientists", "research", "space", "vaccines", "science achievements"],
+    "keywords": [
+      "Indian scientists",
+      "research",
+      "space",
+      "vaccines",
+      "science achievements"
+    ],
     "date": "2024-05-14"
   },
   {
@@ -646,7 +820,13 @@
     "credibility_score": 0.9,
     "category": "science",
     "verdict": "misleading",
-    "keywords": ["nuclear power", "India", "safety", "energy", "risk"],
+    "keywords": [
+      "nuclear power",
+      "India",
+      "safety",
+      "energy",
+      "risk"
+    ],
     "date": "2024-06-18"
   },
   {
@@ -657,7 +837,13 @@
     "credibility_score": 0.94,
     "category": "science",
     "verdict": "misleading",
-    "keywords": ["stem cell therapy", "paralysis", "regenerative medicine", "clinical evidence", "India"],
+    "keywords": [
+      "stem cell therapy",
+      "paralysis",
+      "regenerative medicine",
+      "clinical evidence",
+      "India"
+    ],
     "date": "2024-04-26"
   },
   {
@@ -668,7 +854,13 @@
     "credibility_score": 0.93,
     "category": "economy",
     "verdict": "misleading",
-    "keywords": ["inflation", "economy", "prices", "central bank", "cost of living"],
+    "keywords": [
+      "inflation",
+      "economy",
+      "prices",
+      "central bank",
+      "cost of living"
+    ],
     "date": "2024-05-22"
   },
   {
@@ -679,7 +871,13 @@
     "credibility_score": 0.85,
     "category": "economy",
     "verdict": "misleading",
-    "keywords": ["jobs", "unemployment", "labor market", "India economy", "wages"],
+    "keywords": [
+      "jobs",
+      "unemployment",
+      "labor market",
+      "India economy",
+      "wages"
+    ],
     "date": "2024-06-30"
   },
   {
@@ -690,7 +888,13 @@
     "credibility_score": 0.92,
     "category": "social media",
     "verdict": "misleading",
-    "keywords": ["misinformation", "social media", "algorithms", "viral posts", "propaganda"],
+    "keywords": [
+      "misinformation",
+      "social media",
+      "algorithms",
+      "viral posts",
+      "propaganda"
+    ],
     "date": "2024-04-02"
   },
   {
@@ -701,7 +905,13 @@
     "credibility_score": 0.9,
     "category": "history",
     "verdict": "true",
-    "keywords": ["history", "sources", "misinformation", "archives", "evidence"],
+    "keywords": [
+      "history",
+      "sources",
+      "misinformation",
+      "archives",
+      "evidence"
+    ],
     "date": "2024-05-01"
   },
   {
@@ -712,7 +922,13 @@
     "credibility_score": 0.9,
     "category": "sports",
     "verdict": "true",
-    "keywords": ["cricket", "football", "rankings", "ICC", "FIFA"],
+    "keywords": [
+      "cricket",
+      "football",
+      "rankings",
+      "ICC",
+      "FIFA"
+    ],
     "date": "2024-07-12"
   }
 ]

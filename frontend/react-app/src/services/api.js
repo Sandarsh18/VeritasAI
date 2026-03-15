@@ -19,6 +19,11 @@ export const verifyClaim = async (claim) => {
   return res.data;
 };
 
+export const suggestClaim = async (input) => {
+  const res = await api.post('/api/suggest-claim', { input });
+  return res.data;
+};
+
 export const getHistory = async () => {
   const res = await api.get('/api/claims/history');
   return res.data;

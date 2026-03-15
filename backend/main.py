@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agents.claim_analyzer import analyze_claim
+from agents.claim_analyzer import analyze_claim, suggest_factual_claim
 from agents.prosecutor import run_prosecutor
 from agents.defender import run_defender
 from agents.judge import run_judge
@@ -48,13 +48,13 @@ AGENT_MODELS = {
 }
 
 PROSECUTOR_FALLBACK = {
-    "arguments": ["No contradicting evidence retrieved due to timeout"],
-    "strongest_point": "Timeout - unable to analyze",
+    "arguments": [],
+    "strongest_point": "No contradicting evidence found in available articles for this specific claim",
 }
 
 DEFENDER_FALLBACK = {
-    "arguments": ["No supporting evidence retrieved due to timeout"],
-    "strongest_point": "Timeout - unable to analyze",
+    "arguments": [],
+    "strongest_point": "No supporting evidence found",
 }
 
 APP_START_TIME = time.time()
@@ -110,6 +110,10 @@ class ClaimRequest(BaseModel):
     claim: str
 
 
+class ClaimSuggestionRequest(BaseModel):
+    input: str
+
+
 def _extract_bearer(authorization: str | None) -> str | None:
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
@@ -135,12 +139,50 @@ def check_faiss() -> bool:
 def build_evidence_summary(evidence: list[dict]) -> str:
     return "\n".join(
         [
-            f"- [{a.get('source', '')}] {a.get('title', '')} "
-            f"(credibility: {a.get('credibility_score', 0.5)}): "
-            f"{a.get('content', '')[:150]}"
-            for a in evidence[:3]
+            "\n".join(
+                [
+                    f"ARTICLE {index + 1}",
+                    f"Title: {article.get('title', '')}",
+                    f"Source: {article.get('source', '')}",
+                    f"Category: {article.get('category', '')}",
+                    f"Verdict label: {article.get('verdict', '')}",
+                    f"Relevance score: {article.get('relevance_score', 0.0)}",
+                    f"Content: {article.get('content', '')[:300]}",
+                ]
+            )
+            for index, article in enumerate(evidence[:5])
         ]
     )
+
+
+async def persist_result(claim: str, verdict: str, confidence: int, evidence: list[dict]) -> str | int | None:
+    claim_id = None
+    try:
+        claim_id = await asyncio.to_thread(store_claim, claim, verdict, confidence)
+        for ev in evidence:
+            rel_type = "RELATED_TO"
+            if ev.get("verdict") == "false":
+                rel_type = "CONTRADICTED_BY"
+            elif ev.get("verdict") == "true":
+                rel_type = "SUPPORTED_BY"
+            await asyncio.to_thread(
+                store_evidence_link,
+                claim_id,
+                ev.get("id", "unknown"),
+                rel_type,
+                ev.get("title", ""),
+                ev.get("source", ""),
+            )
+    except Exception as exc:
+        print(f"Neo4j storage failed (non-critical): {exc}")
+
+    try:
+        sqlite_id = await asyncio.to_thread(sqlite_save, claim, verdict, confidence)
+        if not claim_id:
+            claim_id = sqlite_id
+    except Exception as exc:
+        print(f"SQLite storage failed: {exc}")
+    return claim_id
 
 
 def run_parallel_agents(claim: str, evidence_summary: str) -> tuple[dict, dict]:
@@ -171,26 +213,6 @@ def run_parallel_agents(claim: str, evidence_summary: str) -> tuple[dict, dict]:
 async def run_pipeline(claim: str, quick: bool = False) -> dict:
     print(f"[{_ts()}] Starting: {claim[:50]}")
 
-    if not quick:
-        similar = await asyncio.to_thread(find_similar_claims, claim)
-        if similar:
-            cached = similar[0]
-            if cached.get("text", "").lower() == claim.lower():
-                return {
-                    "cached": True,
-                    "claim": claim,
-                    "claim_id": cached["id"],
-                    "verdict": cached.get("verdict", "UNVERIFIED"),
-                    "confidence": cached.get("confidence", 35),
-                    "reasoning": "Retrieved from knowledge graph cache",
-                    "key_evidence": [],
-                    "recommendation": "This claim has been previously analyzed.",
-                    "claim_analysis": {},
-                    "evidence": [],
-                    "prosecutor": {"arguments": [], "strongest_point": ""},
-                    "defender": {"arguments": [], "strongest_point": ""},
-                }
-
     if not await asyncio.to_thread(check_ollama):
         raise HTTPException(status_code=503, detail="Ollama is not running.")
 
@@ -201,20 +223,72 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
         )
     except asyncio.TimeoutError:
         claim_analysis = {
-            "category": "other",
-            "claim_type": "factual",
+            "claim_type": "factual_claim",
             "entities": [],
-            "keywords": claim.split()[:5],
-            "complexity": "moderate",
-            "potential_bias": "moderate",
+            "domain": "general",
+            "should_proceed": True,
+            "early_response": None,
         }
 
-    evidence = []
-    if not quick:
-        try:
-            evidence = await asyncio.wait_for(asyncio.to_thread(retrieve_evidence, claim, 3), timeout=45)
-        except asyncio.TimeoutError:
-            evidence = []
+    claim_type = claim_analysis.get("claim_type", "factual_claim")
+    print(f"[PIPELINE] Claim type: {claim_type}")
+
+    if not claim_analysis.get("should_proceed", True):
+        early = claim_analysis.get("early_response", {})
+        result = {
+            "cached": False,
+            "claim": claim,
+            "claim_id": None,
+            "claim_type": claim_type,
+            "verdict": early.get("verdict", "UNVERIFIED"),
+            "confidence": early.get("confidence", 35),
+            "reasoning": early.get("reasoning", "This input cannot be fact-checked."),
+            "recommendation": early.get("recommendation", "Please submit a specific factual claim."),
+            "key_evidence": [],
+            "claim_analysis": claim_analysis,
+            "evidence": [],
+            "prosecutor": {"arguments": [], "strongest_point": "N/A"},
+            "defender": {"arguments": [], "strongest_point": "N/A"},
+            "pipeline_note": f"Skipped: {claim_type} detected",
+        }
+        if not quick:
+            result["claim_id"] = await persist_result(claim, result["verdict"], result["confidence"], [])
+        return result
+
+    try:
+        evidence_result = await asyncio.wait_for(
+            asyncio.to_thread(retrieve_evidence, claim, 5),
+            timeout=45,
+        )
+    except asyncio.TimeoutError:
+        evidence_result = {
+            "articles": [],
+            "insufficient_evidence": True,
+            "message": "No relevant fact-checked articles found for this specific claim.",
+        }
+
+    if evidence_result.get("insufficient_evidence"):
+        result = {
+            "cached": False,
+            "claim": claim,
+            "claim_id": None,
+            "claim_type": claim_type,
+            "verdict": "UNVERIFIED",
+            "confidence": 30,
+            "reasoning": f"No relevant fact-checked articles found for this specific claim about '{claim}'.",
+            "recommendation": "This claim may be too specific or niche for our current evidence database.",
+            "key_evidence": [],
+            "claim_analysis": claim_analysis,
+            "evidence": [],
+            "prosecutor": {"arguments": [], "strongest_point": "No relevant evidence"},
+            "defender": {"arguments": [], "strongest_point": "No relevant evidence"},
+            "pipeline_note": "Insufficient evidence",
+        }
+        if not quick:
+            result["claim_id"] = await persist_result(claim, result["verdict"], result["confidence"], [])
+        return result
+
+    evidence = evidence_result.get("articles", [])
 
     print(f"[{_ts()}] RAG done: {len(evidence)} articles")
 
@@ -225,15 +299,11 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
 
     evidence_summary = build_evidence_summary(evidence)
 
-    if quick:
-        prosecutor_result = PROSECUTOR_FALLBACK
-        defender_result = DEFENDER_FALLBACK
-    else:
-        prosecutor_result, defender_result = await asyncio.to_thread(
-            run_parallel_agents, claim, evidence_summary
-        )
-        print(f"[{_ts()}] Prosecutor done")
-        print(f"[{_ts()}] Defender done")
+    prosecutor_result, defender_result = await asyncio.to_thread(
+        run_parallel_agents, claim, evidence_summary
+    )
+    print(f"[{_ts()}] Prosecutor done")
+    print(f"[{_ts()}] Defender done")
 
     try:
         judge_result = await asyncio.wait_for(
@@ -256,53 +326,13 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
     confidence = max(30, min(97, confidence))
     print(f"[{_ts()}] Judge done: {verdict} {confidence}%")
 
-    claim_id = None
-    if quick:
-        return {
-            "cached": False,
-            "claim": claim,
-            "claim_id": None,
-            "verdict": verdict,
-            "confidence": confidence,
-            "reasoning": judge_result.get("reasoning", ""),
-            "key_evidence": judge_result.get("key_evidence", []),
-            "recommendation": judge_result.get("recommendation", ""),
-            "claim_analysis": claim_analysis,
-            "evidence": [],
-            "prosecutor": prosecutor_result,
-            "defender": defender_result,
-        }
-
-    try:
-        claim_id = await asyncio.to_thread(store_claim, claim, verdict, confidence)
-        for ev in evidence:
-            rel_type = "RELATED_TO"
-            if ev.get("verdict") == "false":
-                rel_type = "CONTRADICTED_BY"
-            elif ev.get("verdict") == "true":
-                rel_type = "SUPPORTED_BY"
-            await asyncio.to_thread(
-                store_evidence_link,
-                claim_id,
-                ev.get("id", "unknown"),
-                rel_type,
-                ev.get("title", ""),
-                ev.get("source", ""),
-            )
-    except Exception as exc:
-        print(f"Neo4j storage failed (non-critical): {exc}")
-
-    try:
-        sqlite_id = await asyncio.to_thread(sqlite_save, claim, verdict, confidence)
-        if not claim_id:
-            claim_id = sqlite_id
-    except Exception as exc:
-        print(f"SQLite storage failed: {exc}")
+    claim_id = None if quick else await persist_result(claim, verdict, confidence, evidence)
 
     return {
         "cached": False,
         "claim": claim,
         "claim_id": claim_id,
+        "claim_type": claim_type,
         "verdict": verdict,
         "confidence": confidence,
         "reasoning": judge_result.get("reasoning", ""),
@@ -312,6 +342,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
         "evidence": evidence,
         "prosecutor": prosecutor_result,
         "defender": defender_result,
+        "pipeline_note": "Full pipeline completed",
     }
 
 
@@ -341,9 +372,9 @@ async def health():
         "total_claims_verified": total_claims_verified,
         "uptime_seconds": int(time.time() - APP_START_TIME),
         "models": {
-            "prosecutor": "mistral",
-            "defender": "phi3",
-            "judge": "llama3",
+            "prosecutor": AGENT_MODELS["prosecutor"],
+            "defender": AGENT_MODELS["defender"],
+            "judge": AGENT_MODELS["judge"],
         },
     }
 
@@ -401,6 +432,7 @@ async def verify_claim(
         return result
     except asyncio.TimeoutError:
         return {
+            "claim_type": "factual_claim",
             "verdict": "UNVERIFIED",
             "confidence": 35,
             "reasoning": "Analysis took too long. Try a shorter claim.",
@@ -421,12 +453,21 @@ async def verify_claim_quick(request: ClaimRequest):
         return await asyncio.wait_for(run_pipeline(claim, quick=True), timeout=60)
     except asyncio.TimeoutError:
         return {
+            "claim_type": "factual_claim",
             "verdict": "UNVERIFIED",
             "confidence": 35,
             "reasoning": "Quick analysis timed out. Please retry.",
             "claim": claim,
             "error": "timeout",
         }
+
+
+@app.post("/api/suggest-claim")
+async def suggest_claim(payload: ClaimSuggestionRequest):
+    user_input = payload.input.strip()
+    if not user_input:
+        raise HTTPException(status_code=400, detail="Input cannot be empty")
+    return await asyncio.to_thread(suggest_factual_claim, user_input)
 
 
 @app.get("/api/claims/history")
