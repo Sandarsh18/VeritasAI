@@ -116,6 +116,20 @@ def extract_json(text: str) -> dict:
     clean = re.sub(r"```(?:json)?\s*", "", text).strip()
     clean = clean.replace("```", "").strip()
 
+    def _try_parse(candidate: str) -> dict:
+        try:
+            return json.loads(candidate)
+        except Exception:
+            pass
+
+        try:
+            fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
+            fixed = re.sub(r"(?<!\\)'([^']*)'(?=\s*:)", r'"\1"', fixed)
+            fixed = re.sub(r":\s*'([^']*)'", lambda match: ': "' + match.group(1).replace('"', '\\"') + '"', fixed)
+            return json.loads(fixed)
+        except Exception:
+            return {}
+
     depth = 0
     start_index = -1
     for idx, char in enumerate(clean):
@@ -127,14 +141,15 @@ def extract_json(text: str) -> dict:
             depth -= 1
             if depth == 0 and start_index >= 0:
                 candidate = clean[start_index : idx + 1]
-                try:
-                    return json.loads(candidate)
-                except Exception:
-                    try:
-                        fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
-                        return json.loads(fixed)
-                    except Exception:
-                        continue
+                parsed = _try_parse(candidate)
+                if parsed:
+                    return parsed
+
+    stripped = clean.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        parsed = _try_parse(stripped)
+        if parsed:
+            return parsed
 
     return {}
 

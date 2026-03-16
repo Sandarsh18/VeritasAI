@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -32,20 +32,46 @@ const AGENT_CONFIG = {
   },
 };
 
-function TypewriterText({ text }) {
-  return <span>{text}</span>;
+function TypewriterText({ text, delay = 0 }) {
+  const [displayed, setDisplayed] = useState('');
+
+  useEffect(() => {
+    let index = 0;
+    let interval;
+    const timer = setTimeout(() => {
+      interval = setInterval(() => {
+        setDisplayed(text.slice(0, index));
+        index += 1;
+        if (index > text.length) {
+          clearInterval(interval);
+        }
+      }, 12);
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+      if (interval) clearInterval(interval);
+    };
+  }, [text, delay]);
+
+  return (
+    <span>
+      {displayed}
+      <span className="cursor">|</span>
+    </span>
+  );
 }
 
-export default function AgentCard({ type, data, delay = 0 }) {
+export default function AgentCard({ type, data, delay = 0, index = 0, isLeft = false }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = AGENT_CONFIG[type] || AGENT_CONFIG.judge;
   const args = data?.arguments || [];
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5 }}
+      initial={{ opacity: 0, x: isLeft ? -30 : 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: Math.max(delay, index * 0.15), duration: 0.5 }}
       className={type === 'prosecutor' ? 'prosecutor-card' : type === 'defender' ? 'defender-card' : 'glass-card'}
       style={{
         background: cfg.bg,
@@ -135,7 +161,7 @@ export default function AgentCard({ type, data, delay = 0 }) {
                     opacity: 0.85,
                   }}
                 >
-                  {arg}
+                  <TypewriterText text={arg} delay={i * 140} />
                 </motion.div>
               ))}
             </div>

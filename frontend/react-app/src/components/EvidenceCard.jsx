@@ -1,9 +1,18 @@
-export default function EvidenceCard({ article }) {
+import { motion } from 'framer-motion';
+
+export default function EvidenceCard({ article, index = 0 }) {
   const credibility = Math.round((Number(article?.credibility_score || 0) || 0) * 100);
   const relevance = Math.round((Number(article?.relevance_score || 0.5) || 0.5) * 100);
 
   return (
-    <div className="evidence-card glass-card" style={{ borderRadius: 14, padding: '1rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <motion.div
+      className="evidence-card glass-card"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1, duration: 0.4 }}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      style={{ borderRadius: 14, padding: '1rem', display: 'flex', flexDirection: 'column', gap: 10 }}
+    >
       <div className="evidence-header" style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="source-logo" style={{ fontSize: '1.1rem' }}>
@@ -74,6 +83,6 @@ export default function EvidenceCard({ article }) {
           🔗 Read Full Article at {article.source || 'source'}
         </a>
       )}
-    </div>
+    </motion.div>
   );
 }

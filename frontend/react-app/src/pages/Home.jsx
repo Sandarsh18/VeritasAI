@@ -21,6 +21,13 @@ const SAMPLE_CLAIMS = [
 ];
 
 const STEP_LABELS = ['Claim Analysis', 'Evidence Search', 'Agent Debate', 'Judge Review', 'Verdict Ready'];
+const LOADING_TEXTS = [
+  'Retrieving evidence...',
+  'Prosecutor analyzing...',
+  'Defender responding...',
+  'Judge deliberating...',
+  'Finalizing verdict...'
+];
 
 const BANNER_STYLES = {
   info: {
@@ -52,6 +59,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [rating, setRating] = useState(0);
   const [suggestion, setSuggestion] = useState(null);
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
 
   const handleVerify = useCallback(async (claimText) => {
     const text = (claimText || claim).trim();
@@ -119,6 +127,19 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleVerify]);
 
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingTextIndex(0);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setLoadingTextIndex(prev => (prev + 1) % LOADING_TEXTS.length);
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [isLoading]);
+
   return (
     <main className="home-main" style={{ maxWidth: 1280, width: '100%', margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
       {result?.verdict === 'TRUE' && <Confetti recycle={false} numberOfPieces={160} />}
@@ -161,9 +182,9 @@ export default function Home() {
 
       {/* Input card */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
         className="glass"
         style={{ padding: '1.5rem', marginBottom: '1.5rem' }}
       >
@@ -261,8 +282,9 @@ export default function Home() {
         )}
 
         <motion.button
-          whileHover={{ scale: 1.02, boxShadow: '0 0 30px rgba(99,102,241,0.5)' }}
-          whileTap={{ scale: 0.97 }}
+          whileHover={{ scale: 1.02, y: -2, boxShadow: '0 0 30px rgba(99,102,241,0.5)' }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 400 }}
           onClick={() => handleVerify()}
           disabled={isLoading || !claim.trim()}
           style={{
@@ -310,6 +332,18 @@ export default function Home() {
             <div style={{ textAlign: 'center', fontSize: '0.85rem', opacity: 0.6, marginTop: 8 }}>
               {activeStep >= 0 && activeStep < STEP_LABELS.length ? STEP_LABELS[activeStep] + '...' : ''}
             </div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={loadingTextIndex}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.25 }}
+                style={{ textAlign: 'center', fontSize: '0.88rem', marginTop: 8, color: '#a5b4fc' }}
+              >
+                {LOADING_TEXTS[loadingTextIndex]}
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
@@ -318,8 +352,10 @@ export default function Home() {
       <AnimatePresence>
         {result && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            key={result?.claim}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
             style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}
           >
             {/* Verdict */}
@@ -430,9 +466,9 @@ export default function Home() {
             {/* Agent debate */}
             <div>
               <div style={{ fontWeight: 700, marginBottom: 12, fontSize: '1rem', opacity: 0.8 }}>Agent Debate</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-                {result.prosecutor && <AgentCard type="prosecutor" data={result.prosecutor} delay={0.1} />}
-                {result.defender   && <AgentCard type="defender"   data={result.defender}   delay={0.2} />}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {result.prosecutor && <AgentCard type="prosecutor" data={result.prosecutor} delay={0.1} index={0} isLeft />}
+                {result.defender   && <AgentCard type="defender"   data={result.defender}   delay={0.2} index={1} />}
               </div>
             </div>
 
@@ -464,7 +500,7 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginTop: '20px' }}>
                   {result.evidence.map((ev, i) => (
                     <EvidenceCard key={ev.id || i} article={ev} index={i} delay={i * 0.1} />
                   ))}

@@ -19,6 +19,7 @@ export default function PipelineVisualizer({ activeStep = 0 }) {
         return (
           <div key={step.id} style={{ display: 'flex', alignItems: 'center' }}>
             <motion.div
+              className={`pipeline-step ${isActive ? 'active' : isComplete ? 'complete' : 'pending'}`}
               animate={isActive ? { boxShadow: ['0 0 0 rgba(99,102,241,0.0)', '0 0 22px rgba(99,102,241,0.55)', '0 0 0 rgba(99,102,241,0.0)'] } : {}}
               transition={{ duration: 1.5, repeat: Infinity }}
               style={{
@@ -36,7 +37,7 @@ export default function PipelineVisualizer({ activeStep = 0 }) {
                   ? 'rgba(99,102,241,0.16)'
                   : 'rgba(148,163,184,0.08)',
                 padding: '12px 10px',
-                opacity: isPending ? 0.7 : 1,
+                opacity: isPending ? 0.4 : 1,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -46,7 +47,10 @@ export default function PipelineVisualizer({ activeStep = 0 }) {
               }}
             >
               {isComplete && (
-                <span
+                <motion.span
+                  initial={{ opacity: 0, scale: 0, rotate: -45 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ duration: 0.35 }}
                   style={{
                     position: 'absolute',
                     top: 8,
@@ -60,14 +64,15 @@ export default function PipelineVisualizer({ activeStep = 0 }) {
                     display: 'grid',
                     placeItems: 'center',
                     fontWeight: 800,
+                    animation: 'stepComplete 0.45s ease',
                   }}
                 >
                   ✓
-                </span>
+                </motion.span>
               )}
 
               <motion.div
-                animate={isActive ? { scale: [1, 1.08, 1] } : {}}
+                animate={isActive ? { scale: [1, 1.08, 1] } : isComplete ? { scale: 1.05 } : { scale: 1 }}
                 transition={{ duration: 1, repeat: Infinity }}
                 style={{ fontSize: 48, lineHeight: 1, marginBottom: 8 }}
               >
@@ -83,9 +88,7 @@ export default function PipelineVisualizer({ activeStep = 0 }) {
             </motion.div>
 
             {index < steps.length - 1 && (
-              <motion.div
-                animate={isComplete ? { backgroundPosition: ['0% 50%', '100% 50%'] } : {}}
-                transition={{ duration: 1.3, repeat: Infinity, ease: 'linear' }}
+              <div
                 style={{
                   width: 36,
                   height: 3,
@@ -100,7 +103,21 @@ export default function PipelineVisualizer({ activeStep = 0 }) {
                       : 'rgba(148,163,184,0.32)',
                   backgroundSize: isComplete ? '200% 200%' : 'auto',
                 }}
-              />
+              >
+                <motion.div
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: isComplete ? 1 : 0 }}
+                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    transformOrigin: 'left center',
+                    background: 'linear-gradient(90deg, rgba(16,185,129,0.25), rgba(16,185,129,1), rgba(16,185,129,0.25))',
+                    borderRadius: 99,
+                    animation: isComplete ? 'lineGrow 0.35s ease forwards' : 'none',
+                  }}
+                />
+              </div>
             )}
           </div>
         );

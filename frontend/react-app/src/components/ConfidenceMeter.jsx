@@ -21,15 +21,24 @@ function getMeterColor(confidence, verdict) {
 }
 
 export default function ConfidenceMeter({ confidence = 0, verdict = '' }) {
-  const [displayed, setDisplayed] = useState(0);
+  const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
+    if (!confidence) {
+      setDisplayValue(0);
+      return;
+    }
+
     let start = 0;
     const step = confidence / 50;
     const timer = setInterval(() => {
       start += step;
-      if (start >= confidence) { setDisplayed(confidence); clearInterval(timer); }
-      else setDisplayed(Math.round(start));
+      if (start >= confidence) {
+        setDisplayValue(confidence);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(Math.floor(start));
+      }
     }, 20);
     return () => clearInterval(timer);
   }, [confidence]);
@@ -40,7 +49,7 @@ export default function ConfidenceMeter({ confidence = 0, verdict = '' }) {
   const r = 80;
   const strokeWidth = 12;
   const circumference = Math.PI * r; // half circle
-  const offset = circumference - (confidence / 100) * circumference;
+  const offset = circumference - (displayValue / 100) * circumference;
 
   const color = getMeterColor(confidence, verdict ? verdict.toUpperCase() : '');
   const zone = getEvidenceZone(confidence);
@@ -75,7 +84,7 @@ export default function ConfidenceMeter({ confidence = 0, verdict = '' }) {
         {/* Center value */}
         <text x={cx} y={cy + 10} fill={color} fontSize="32" fontWeight="800" textAnchor="middle"
           style={{ fontFamily: 'Inter, sans-serif' }}>
-          {displayed}%
+          {displayValue}%
         </text>
         <text x={cx} y={cy + 28} fill="rgba(255,255,255,0.5)" fontSize="11" textAnchor="middle">
           CONFIDENCE

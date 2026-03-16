@@ -108,15 +108,32 @@ KNOWLEDGE_BASE = [
         "is_realtime": False,
         "keywords": ["5g", "coronavirus", "covid", "spread", "radio waves"],
     },
+    {
+        "id": "kb_tech_mobile_001",
+        "title": "Mobile Phones Are Communication Devices, Not Cooking Tools",
+        "content": "Mobile phones are electronic communication and computing tools. They do not function as cooking appliances such as stoves, ovens, or microwaves. Claims saying mobiles are tools for cooking are false.",
+        "source": "Technology Reference",
+        "credibility_score": 0.98,
+        "source_logo": "📱",
+        "source_type": "Technology Fact",
+        "published_date": "Established Fact",
+        "author": "Technical Consensus",
+        "is_realtime": False,
+        "keywords": ["mobile", "phone", "smartphone", "cooking", "appliance", "communication"],
+    },
 ]
 
 
 def search_knowledge_base(claim: str, top_k: int = 3) -> list:
     claim_lower = claim.lower()
+    stop_words = {
+        "is", "are", "was", "the", "a", "an", "in", "of", "to", "and", "or", "that", "this", "it", "used", "tool",
+        "for", "with", "from", "year", "started", "current", "cause",
+    }
     claim_words = {
         word
         for word in claim_lower.replace("?", " ").replace(",", " ").split()
-        if word not in {"is", "are", "was", "the", "a", "an", "in", "of", "to", "and", "or", "that", "this", "it"}
+        if len(word) > 2 and word not in stop_words
     }
 
     scored = []
@@ -124,20 +141,37 @@ def search_knowledge_base(claim: str, top_k: int = 3) -> list:
         keywords = [keyword.lower() for keyword in article.get("keywords", [])]
         title = article.get("title", "").lower()
         content = article.get("content", "").lower()
+        combined = f"{title} {content}"
 
-        score = 0
+        score = 0.0
+        phrase_hits = 0
         for keyword in keywords:
-            if keyword in claim_lower:
-                score += 2
+            if " " in keyword and keyword in claim_lower:
+                phrase_hits += 1
+                score += 3
+
+        keyword_tokens = {
+            token
+            for keyword in keywords
+            for token in keyword.replace("-", " ").split()
+            if len(token) > 2 and token not in stop_words
+        }
+        token_overlap = len(claim_words.intersection(keyword_tokens))
+        if token_overlap:
+            score += token_overlap * 1.5
 
         for word in claim_words:
-            if len(word) > 3 and (word in title or word in content):
-                score += 1
+            if word in combined:
+                score += 0.5
+
+        overlap_ratio = token_overlap / max(len(claim_words), 1)
+        if phrase_hits == 0 and overlap_ratio < 0.34:
+            continue
 
         if score > 0:
             candidate = article.copy()
-            candidate["relevance_score"] = min(score / 10, 0.95)
-            candidate["combined_score"] = min(score / 8, 0.95)
+            candidate["relevance_score"] = min(score / 8, 0.98)
+            candidate["combined_score"] = min(score / 7, 0.98)
             candidate["evidence_source"] = "knowledge_base"
             scored.append(candidate)
 

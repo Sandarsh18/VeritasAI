@@ -62,8 +62,10 @@ function AppInner() {
   return (
     <BrowserRouter>
       <div className="animated-bg" />
-      <Navbar />
-      <AnimatedRoutes />
+      <div style={{ maxWidth: '1400px', width: '95%', margin: '0 auto', padding: '0 32px' }}>
+        <Navbar />
+        <AnimatedRoutes />
+      </div>
       <Toaster
         position="bottom-right"
         toastOptions={{

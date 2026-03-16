@@ -43,9 +43,10 @@ export default function VerdictBadge({ verdict, size = 'large' }) {
 
   return (
     <motion.div
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.2 }}
+      initial={{ scale: 0, rotate: -10 }}
+      animate={{ scale: 1, rotate: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.2 }}
+      className="verdict-glow"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -55,6 +56,7 @@ export default function VerdictBadge({ verdict, size = 'large' }) {
         background: v.bg,
         border: `2px solid ${v.border}`,
         boxShadow: v.glow,
+        animation: 'verdictGlow 2s ease-in-out infinite',
         color: v.color,
       }}
     >
