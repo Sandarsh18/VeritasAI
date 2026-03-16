@@ -11,6 +11,7 @@ import VerdictBadge from '../components/VerdictBadge';
 import ConfidenceMeter from '../components/ConfidenceMeter';
 import AgentCard from '../components/AgentCard';
 import EvidenceCard from '../components/EvidenceCard';
+import MisinformationTracker from '../components/MisinformationTracker';
 import { TwitterShareButton, WhatsappShareButton, TwitterIcon, WhatsappIcon } from 'react-share';
 
 const SAMPLE_CLAIMS = [
@@ -19,7 +20,7 @@ const SAMPLE_CLAIMS = [
   'Drinking bleach cures COVID',
 ];
 
-const STEP_LABELS = ['Evidence Retrieval', 'Prosecutor Analysis', 'Defender Analysis', 'Judge Deliberation', 'Final Verdict'];
+const STEP_LABELS = ['Claim Analysis', 'Evidence Search', 'Agent Debate', 'Judge Review', 'Verdict Ready'];
 
 const BANNER_STYLES = {
   info: {
@@ -354,7 +355,14 @@ export default function Home() {
               </div>
               <ConfidenceMeter confidence={result.confidence} verdict={result.verdict} />
               {result.reasoning && (
-                <p style={{ marginTop: '1rem', opacity: 0.8, maxWidth: 650, margin: '1rem auto 0', lineHeight: 1.7, fontSize: '0.9rem' }}>
+                <p style={{
+                  color: '#e2e8f0',
+                  fontSize: '1rem',
+                  lineHeight: '1.7',
+                  textAlign: 'center',
+                  padding: '0 20px',
+                  marginTop: '1rem',
+                }}>
                   {result.reasoning}
                 </p>
               )}
@@ -373,13 +381,13 @@ export default function Home() {
                 </div>
               )}
               {result.recommendation && (
-                <div style={{
-                  marginTop: '1rem', background: 'rgba(99,102,241,0.1)',
-                  border: '1px solid rgba(99,102,241,0.2)', borderRadius: 12,
-                  padding: '12px 16px', fontSize: '0.85rem', maxWidth: 600, margin: '1rem auto 0',
-                }}>
-                  <span style={{ fontWeight: 600, color: '#a5b4fc' }}>Recommendation: </span>
-                  {result.recommendation}
+                <div className="recommendation-box" style={{ maxWidth: 600, margin: '1rem auto 0' }}>
+                  <span style={{color:'#a5b4fc', fontWeight:600}}>
+                    Recommendation:{' '}
+                  </span>
+                  <span style={{color:'#e0e7ff'}}>
+                    {result.recommendation}
+                  </span>
                 </div>
               )}
 
@@ -410,6 +418,14 @@ export default function Home() {
                 )}
               </div>
             </motion.div>
+
+            {['FALSE', 'MISLEADING'].includes(result.verdict) && result.misinformation_analysis && (
+              <MisinformationTracker
+                data={result.misinformation_analysis}
+                claim={result.claim}
+                verdict={result.verdict}
+              />
+            )}
 
             {/* Agent debate */}
             <div>

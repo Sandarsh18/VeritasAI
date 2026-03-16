@@ -6,110 +6,56 @@ VALID_CLAIM_TYPES = {
     "factual_claim",
     "opinion",
     "question",
+    "already_known_true",
     "ambiguous",
-    "already_known",
 }
 
 QUESTION_STARTERS = {
-    "is",
-    "are",
-    "was",
-    "were",
-    "do",
-    "does",
-    "did",
-    "can",
-    "could",
-    "should",
-    "would",
-    "will",
-    "what",
-    "which",
-    "who",
-    "why",
-    "how",
-    "where",
-    "when",
+    "is", "are", "was", "were", "do", "does", "did", "can", "could",
+    "should", "would", "will", "what", "which", "who", "why", "how", "where", "when",
 }
 
-FACTUAL_SIGNAL_WORDS = {
-    "cause",
-    "causes",
-    "cure",
-    "cures",
-    "prevent",
-    "prevents",
-    "spread",
-    "spreads",
-    "works",
-    "orbits",
-    "contains",
-    "reduces",
-    "increases",
-    "ranked",
-    "rank",
+OPINION_MARKERS = {
+    "good", "bad", "better", "best", "worse", "worst", "great", "terrible", "awesome"
 }
 
 STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "by",
-    "for",
-    "from",
-    "has",
-    "have",
-    "in",
-    "is",
-    "it",
-    "of",
-    "on",
-    "or",
-    "that",
-    "the",
-    "this",
-    "to",
-    "was",
-    "were",
-    "with",
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have", "in",
+    "is", "it", "of", "on", "or", "that", "the", "this", "to", "was", "were", "with",
 }
 
 DOMAIN_KEYWORDS = {
-    "health": {"vaccine", "covid", "virus", "doctor", "medicine", "bleach", "ivermectin", "cancer", "weight", "diet"},
-    "politics": {"election", "vote", "government", "parliament", "citizenship", "caa", "gdp", "speech", "policy"},
-    "science": {"earth", "sun", "oxygen", "water", "space", "quantum", "stem", "cell", "biology", "nuclear"},
-    "education": {"college", "university", "nirf", "rvce", "iit", "iim", "degree", "campus", "ranking"},
-    "technology": {"ai", "chatgpt", "internet", "software", "5g", "smartphone", "encryption", "social", "media"},
+    "health": {"vaccine", "covid", "virus", "doctor", "medicine", "bleach", "ivermectin", "cancer", "diet"},
+    "politics": {"election", "vote", "government", "parliament", "pm", "prime", "minister", "policy", "modi", "rahul"},
+    "science": {"earth", "sun", "oxygen", "water", "space", "biology", "physics", "flat"},
+    "education": {"college", "university", "nirf", "rvce", "iit", "iim", "degree", "ranking"},
+    "technology": {"ai", "chatgpt", "internet", "software", "5g", "smartphone", "encryption", "media"},
 }
 
 EARLY_RESPONSES = {
     "opinion": {
         "verdict": "UNVERIFIED",
         "confidence": 40,
-        "reasoning": "This appears to be a subjective opinion rather than a verifiable factual claim. VeritasAI works best with specific factual claims that can be checked against evidence.",
-        "recommendation": "Try rephrasing as a specific factual claim for better results.",
+        "reasoning": "This appears to be a subjective opinion rather than a verifiable factual claim.",
+        "recommendation": "Try rephrasing it as a specific factual statement.",
     },
     "question": {
         "verdict": "UNVERIFIED",
         "confidence": 35,
-        "reasoning": "This is phrased as a question rather than a factual claim. Please rephrase it as a statement for verification.",
-        "recommendation": "Example: Instead of 'Is X true?' try 'X is true' as the claim.",
+        "reasoning": "This is phrased as a question rather than a factual claim.",
+        "recommendation": "Rephrase as a statement, then verify it.",
     },
-    "already_known": {
+    "already_known_true": {
         "verdict": "TRUE",
         "confidence": 95,
-        "reasoning": "This is a well-established fact supported by overwhelming scientific consensus.",
-        "recommendation": "This fact is universally accepted.",
+        "reasoning": "This is a universally accepted fact.",
+        "recommendation": "No further verification is typically required.",
     },
     "ambiguous": {
         "verdict": "UNVERIFIED",
         "confidence": 33,
-        "reasoning": "This input is too vague or unclear to verify reliably. VeritasAI needs a concrete statement with a clear subject and claim.",
-        "recommendation": "Try rewriting this as one specific factual statement.",
+        "reasoning": "This input is too vague or unclear to verify reliably.",
+        "recommendation": "Rewrite it as one concrete factual claim.",
     },
 }
 
@@ -130,31 +76,29 @@ def _heuristic_claim_type(claim: str) -> str | None:
         return "ambiguous"
 
     if lowered.endswith("?") or tokens[0] in QUESTION_STARTERS:
-        if any(marker in lowered for marker in ("best", "better", "good", "great", "worst", "bad")):
-            return "opinion"
         return "question"
 
-    if any(pattern in lowered for pattern in ("best ", " better ", " worse ", "good college", "great college", "terrible", "amazing", "bad college", "best college", "best phone")):
+    if any(marker in tokens for marker in OPINION_MARKERS):
+        if any(kw in tokens for kw in ("leader", "party", "college", "government", "person")):
+            return "opinion"
+    if any(pattern in lowered for pattern in (" is better than ", " is best ", " is a good ", " is a bad ")):
         return "opinion"
 
-    known_patterns = (
-        "earth orbits the sun",
+    known_patterns = {
+        "earth orbits sun",
         "the earth orbits the sun",
-        "sun rises in the east",
-        "the sun rises in the east",
         "water is h2o",
         "humans need oxygen",
-        "oxygen is necessary for humans",
-    )
-    if any(pattern == lowered for pattern in known_patterns):
-        return "already_known"
+    }
+    if lowered in known_patterns:
+        return "already_known_true"
 
-    if any(token in FACTUAL_SIGNAL_WORDS for token in tokens):
+    factual_markers = {
+        "current", "pm", "prime", "minister", "won", "contain", "contains", "cause", "causes",
+        "richest", "flat", "microchips", "world", "cup",
+    }
+    if any(token in factual_markers for token in tokens):
         return "factual_claim"
-
-    vague_patterns = {"tell me", "what about", "this is", "that thing", "maybe true"}
-    if lowered in vague_patterns:
-        return "ambiguous"
 
     return None
 
@@ -163,25 +107,33 @@ def _classify_with_ollama(claim: str) -> str:
     prompt = (
         "Classify this input into exactly one category.\n"
         f"Input: '{claim}'\n\n"
-        "Categories:\n"
-        "- factual_claim: a specific verifiable statement that could be true or false based on evidence\n"
-        "  Examples: 'vaccines cause autism', '5G towers spread disease', 'drinking bleach cures COVID'\n"
-        "- opinion: subjective preference or evaluation\n"
-        "  Examples: 'X is the best Y', 'X is better than Y', 'X is great/bad/terrible'\n"
-        "- question: phrased as a question\n"
-        "  Examples: 'is X true?', 'does X cause Y?', 'can X do Y?'\n"
-        "- already_known: universally accepted scientific fact\n"
-        "  Examples: 'earth orbits sun', 'water is H2O', 'humans need oxygen'\n"
-        "- ambiguous: too vague or unclear to classify\n\n"
-        "Reply with ONLY one word from the list above.\n"
-        "No explanation. No punctuation. Just the category."
+        "FACTUAL_CLAIM: A specific statement that is objectively TRUE or FALSE based on verifiable facts.\n"
+        "This includes:\n"
+        "- Claims about who holds a position/title\n"
+        "- Claims about events that happened or didn't\n"
+        "- Claims about scientific facts\n"
+        "- Claims about statistics or numbers\n"
+        "- Claims that something causes something else\n"
+        "- Historical claims\n"
+        "Examples: 'Rahul Gandhi is PM of India',\n"
+        "          'vaccines cause autism',\n"
+        "          '5G causes cancer',\n"
+        "          'India won WW2'\n\n"
+        "OPINION: Subjective preference or evaluation that cannot be objectively true/false.\n"
+        "Examples: 'X is the best Y',\n"
+        "          'X is better than Y',\n"
+        "          'X is a good/bad person'\n\n"
+        "QUESTION: Phrased as a question.\n"
+        "Examples: 'Is X true?', 'Does X cause Y?'\n\n"
+        "ALREADY_KNOWN_TRUE: Universally accepted fact.\n"
+        "Examples: 'Earth orbits Sun', 'water is H2O'\n\n"
+        "Reply ONLY with one word:\n"
+        "factual_claim OR opinion OR question OR already_known_true"
     )
     response = call_ollama(prompt, num_predict=8, num_ctx=512).lower().strip()
     response = re.sub(r"[^a-z_\n]", " ", response).strip().split()
-    if not response:
-        return "factual_claim"
-    first = response[0]
-    return first if first in VALID_CLAIM_TYPES else "factual_claim"
+    first = response[0] if response else "factual_claim"
+    return first if first in {"factual_claim", "opinion", "question", "already_known_true"} else "factual_claim"
 
 
 def _extract_entities(claim: str) -> list[str]:

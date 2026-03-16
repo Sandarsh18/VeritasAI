@@ -1,93 +1,104 @@
 import { motion } from 'framer-motion';
-import { Search, Scale, Shield, Gavel, CheckCircle } from 'lucide-react';
 
-const STEPS = [
-  { id: 0, label: 'Evidence\nRetrieval', icon: Search, color: '#6366f1', model: 'FAISS + RAG' },
-  { id: 1, label: 'Prosecutor\nAnalysis', icon: Scale, color: '#ef4444', model: 'Mistral 7B' },
-  { id: 2, label: 'Defender\nAnalysis', icon: Shield, color: '#10b981', model: 'Phi-3 Mini' },
-  { id: 3, label: 'Judge\nDeliberation', icon: Gavel, color: '#8b5cf6', model: 'LLaMA 3' },
-  { id: 4, label: 'Final\nVerdict', icon: CheckCircle, color: '#f59e0b', model: '' },
+const steps = [
+  { id: 0, icon: '🔍', label: 'Claim Analysis', desc: 'Classifying claim type' },
+  { id: 1, icon: '📚', label: 'Evidence Search', desc: 'Retrieving articles' },
+  { id: 2, icon: '⚔️', label: 'Agent Debate', desc: 'Prosecutor vs Defender' },
+  { id: 3, icon: '⚖️', label: 'Judge Review', desc: 'Weighing arguments' },
+  { id: 4, icon: '✅', label: 'Verdict Ready', desc: 'Analysis complete' },
 ];
 
-export default function PipelineVisualizer({ activeStep }) {
+export default function PipelineVisualizer({ activeStep = 0 }) {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 0,
-      flexWrap: 'wrap',
-      padding: '1rem 0',
-    }}>
-      {STEPS.map((step, i) => {
-        const Icon = step.icon;
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 0 }}>
+      {steps.map((step, index) => {
         const isActive = activeStep === step.id;
-        const isDone = activeStep > step.id;
+        const isComplete = activeStep > step.id;
         const isPending = activeStep < step.id;
 
         return (
           <div key={step.id} style={{ display: 'flex', alignItems: 'center' }}>
             <motion.div
-              animate={isActive ? {
-                boxShadow: [`0 0 0px ${step.color}`, `0 0 25px ${step.color}`, `0 0 0px ${step.color}`],
-              } : {}}
-              transition={{ duration: 1.2, repeat: Infinity }}
+              animate={isActive ? { boxShadow: ['0 0 0 rgba(99,102,241,0.0)', '0 0 22px rgba(99,102,241,0.55)', '0 0 0 rgba(99,102,241,0.0)'] } : {}}
+              transition={{ duration: 1.5, repeat: Infinity }}
               style={{
+                width: 132,
+                minHeight: 116,
+                borderRadius: 14,
+                border: isComplete
+                  ? '1px solid rgba(16,185,129,0.65)'
+                  : isActive
+                  ? '1px solid rgba(99,102,241,0.7)'
+                  : '1px solid rgba(148,163,184,0.35)',
+                background: isComplete
+                  ? 'rgba(16,185,129,0.1)'
+                  : isActive
+                  ? 'rgba(99,102,241,0.16)'
+                  : 'rgba(148,163,184,0.08)',
+                padding: '12px 10px',
+                opacity: isPending ? 0.7 : 1,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 8,
-                padding: '12px 16px',
-                borderRadius: 16,
-                background: isActive ? `${step.color}22` : isDone ? 'rgba(255,255,255,0.08)' : 'transparent',
-                border: `1px solid ${isActive ? step.color : isDone ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)'}`,
-                opacity: isPending ? 0.4 : 1,
-                transition: 'all 0.4s ease',
-                minWidth: 80,
+                justifyContent: 'center',
+                textAlign: 'center',
+                position: 'relative',
               }}
             >
-              <motion.div
-                animate={isActive ? { scale: [1, 1.15, 1] } : {}}
-                transition={{ duration: 0.8, repeat: Infinity }}
-                style={{ color: isDone || isActive ? step.color : 'rgba(255,255,255,0.4)' }}
-              >
-                <Icon size={22} />
-              </motion.div>
-              <span style={{
-                fontSize: '0.65rem',
-                fontWeight: 600,
-                color: isActive ? step.color : isDone ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.4)',
-                textAlign: 'center',
-                whiteSpace: 'pre-line',
-                lineHeight: 1.3,
-              }}>
-                {step.label}
-              </span>
-              {step.model ? (
-                <span style={{
-                  fontSize: '0.55rem',
-                  fontWeight: 700,
-                  color: isActive ? step.color : 'rgba(255,255,255,0.3)',
-                  background: isActive ? `${step.color}22` : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${isActive ? step.color + '44' : 'rgba(255,255,255,0.08)'}`,
-                  borderRadius: 10,
-                  padding: '1px 5px',
-                  textAlign: 'center',
-                }}>
-                  {step.model}
+              {isComplete && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    fontSize: 12,
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: 'rgba(16,185,129,0.9)',
+                    color: '#052e16',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontWeight: 800,
+                  }}
+                >
+                  ✓
                 </span>
-              ) : null}
+              )}
+
+              <motion.div
+                animate={isActive ? { scale: [1, 1.08, 1] } : {}}
+                transition={{ duration: 1, repeat: Infinity }}
+                style={{ fontSize: 48, lineHeight: 1, marginBottom: 8 }}
+              >
+                {step.icon}
+              </motion.div>
+
+              <div className="pipeline-label" style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>
+                {step.label}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, lineHeight: 1.25 }}>
+                {step.desc}
+              </div>
             </motion.div>
 
-            {i < STEPS.length - 1 && (
+            {index < steps.length - 1 && (
               <motion.div
+                animate={isComplete ? { backgroundPosition: ['0% 50%', '100% 50%'] } : {}}
+                transition={{ duration: 1.3, repeat: Infinity, ease: 'linear' }}
                 style={{
-                  width: 32,
-                  height: 2,
-                  background: isDone ? 'linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1))' : 'rgba(255,255,255,0.08)',
-                  margin: '0 4px',
-                  marginBottom: 24,
-                  transition: 'background 0.5s ease',
+                  width: 36,
+                  height: 3,
+                  margin: '0 5px',
+                  borderRadius: 99,
+                  border: isPending ? '1px dashed rgba(148,163,184,0.45)' : 'none',
+                  background:
+                    isComplete
+                      ? 'linear-gradient(90deg, rgba(16,185,129,0.2), rgba(16,185,129,1), rgba(16,185,129,0.2))'
+                      : isActive
+                      ? 'rgba(99,102,241,0.9)'
+                      : 'rgba(148,163,184,0.32)',
+                  backgroundSize: isComplete ? '200% 200%' : 'auto',
                 }}
               />
             )}

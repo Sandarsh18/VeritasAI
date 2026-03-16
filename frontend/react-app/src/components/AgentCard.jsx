@@ -46,6 +46,7 @@ export default function AgentCard({ type, data, delay = 0 }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5 }}
+      className={type === 'prosecutor' ? 'prosecutor-card' : type === 'defender' ? 'defender-card' : 'glass-card'}
       style={{
         background: cfg.bg,
         border: `1px solid ${cfg.border}`,

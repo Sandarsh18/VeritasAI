@@ -130,3 +130,131 @@ h1,h2,h3,h4 { font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
 }
+
+/* ── FORCE VISIBLE TEXT EVERYWHERE ── */
+
+:root {
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-accent: #a5b4fc;
+
+  --card-bg: rgba(255, 255, 255, 0.06);
+  --card-border: rgba(255, 255, 255, 0.12);
+
+  --color-true: #10b981;
+  --color-false: #ef4444;
+  --color-misleading: #f59e0b;
+  --color-unverified: #94a3b8;
+
+  --prosecutor-color: #ef4444;
+  --defender-color: #10b981;
+  --judge-color: #6366f1;
+}
+
+p, span, li, td, th, label, div {
+  color: inherit;
+}
+
+.glass-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  color: var(--text-primary);
+}
+
+.prosecutor-card {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5 !important;
+}
+
+.defender-card {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #6ee7b7 !important;
+}
+
+.evidence-title { color: #f1f5f9 !important; font-weight: 600; }
+.evidence-author { color: #a5b4fc !important; font-style: italic; }
+.evidence-date { color: #94a3b8 !important; }
+.evidence-source { color: #e2e8f0 !important; font-weight: 600; }
+.evidence-content { color: #cbd5e1 !important; line-height: 1.6; }
+
+.verdict-false { color: #fca5a5 !important; }
+.verdict-true { color: #6ee7b7 !important; }
+.verdict-misleading { color: #fde68a !important; }
+.verdict-unverified { color: #cbd5e1 !important; }
+
+.recommendation-box {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.30);
+  color: #e0e7ff !important;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.pipeline-label {
+  color: #e2e8f0 !important;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+.source-badge {
+  background: rgba(99, 102, 241, 0.20);
+  color: #c7d2fe !important;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.live-badge {
+  background: rgba(16, 185, 129, 0.20);
+  color: #6ee7b7 !important;
+  border: 1px solid rgba(16, 185, 129, 0.40);
+  animation: pulse 2s infinite;
+}
+
+.archive-badge {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1 !important;
+}
+
+.stat-number {
+  color: #f1f5f9 !important;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.stat-label {
+  color: #94a3b8 !important;
+  font-size: 0.875rem;
+}
+
+textarea::placeholder { color: #64748b !important; }
+
+.light {
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --card-bg: rgba(255,255,255,0.75);
+  --card-border: rgba(0,0,0,0.10);
+}
+
+.light .glass-card { color: #0f172a !important; }
+.light .evidence-title { color: #0f172a !important; }
+.light .evidence-author { color: #4f46e5 !important; }
+.light .evidence-content { color: #334155 !important; }
+.light .evidence-date { color: #64748b !important; }
+.light .prosecutor-card { color: #991b1b !important; }
+.light .defender-card { color: #065f46 !important; }
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
