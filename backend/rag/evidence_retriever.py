@@ -4,7 +4,8 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from rag.realtime_fetcher import fetch_realtime_evidence
+from rag.knowledge_base import search_knowledge_base
+from rag.realtime_fetcher import extract_relevance_terms, fetch_realtime_evidence
 
 MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 INDEX = None
@@ -24,16 +25,9 @@ def load_index():
 
 
 def compute_relevance(claim: str, article: dict) -> float:
-    claim_words = set(claim.lower().split())
-    stop_words = {
-        "is", "are", "was", "were", "the", "a", "an",
-        "in", "of", "to", "and", "or", "that", "this",
-        "it", "for", "on", "with", "at", "by", "from",
-        "be", "been", "being", "have", "has", "had",
-        "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "can", "than", "then",
-    }
-    claim_words -= stop_words
+    terms = extract_relevance_terms(claim)
+    claim_words = terms["words"]
+    claim_phrases = terms["phrases"]
 
     if not claim_words:
         return 0.3
@@ -44,8 +38,14 @@ def compute_relevance(claim: str, article: dict) -> float:
     keywords_text = " ".join([item.lower() for item in keywords])
     combined = f"{title} {content} {keywords_text}"
 
-    matches = sum(1 for word in claim_words if word in combined and len(word) > 2)
-    return matches / max(len(claim_words), 1)
+    word_matches = sum(1 for word in claim_words if word in combined and len(word) > 2)
+    phrase_matches = sum(1 for phrase in claim_phrases if phrase in combined)
+
+    if claim_phrases and phrase_matches == 0 and word_matches < min(2, len(claim_words)):
+        return 0.0
+
+    score = (word_matches + (2 * phrase_matches)) / max(len(claim_words) + (2 * len(claim_phrases)), 1)
+    return round(score, 3)
 
 
 def search_local(
@@ -104,12 +104,15 @@ def search_local(
 def retrieve_evidence(claim: str) -> dict:
     print(f"\n[RAG] Claim: '{claim[:60]}'")
 
-    local_articles = search_local(claim, top_k=3, min_vector_sim=0.15, min_keyword_match=0.10)
+    kb_articles = search_knowledge_base(claim, top_k=2)
+    print(f"[RAG] Knowledge base: {len(kb_articles)} articles")
+
+    local_articles = search_local(claim, top_k=2, min_vector_sim=0.15, min_keyword_match=0.15)
     print(f"[RAG] Local: {len(local_articles)} relevant articles")
 
     realtime_articles = []
     try:
-        realtime_articles = fetch_realtime_evidence(claim, max_results=7)
+        realtime_articles = fetch_realtime_evidence(claim, max_results=5)
         print(f"[RAG] Real-time: {len(realtime_articles)} articles")
     except Exception as exc:
         print(f"[RAG] Real-time error: {exc}")
@@ -117,7 +120,7 @@ def retrieve_evidence(claim: str) -> dict:
     filtered_realtime = []
     for article in realtime_articles:
         kw_score = compute_relevance(claim, article)
-        if kw_score >= 0.05:
+        if kw_score >= 0.10:
             article["relevance_score"] = round(kw_score, 3)
             filtered_realtime.append(article)
 
@@ -126,23 +129,17 @@ def retrieve_evidence(claim: str) -> dict:
     all_articles = []
     seen_titles = set()
 
-    for article in filtered_realtime:
-        title = article.get("title", "").lower()[:40]
-        if title not in seen_titles:
-            seen_titles.add(title)
-            all_articles.append(article)
-
-    for article in local_articles:
-        title = article.get("title", "").lower()[:40]
-        if title not in seen_titles:
-            seen_titles.add(title)
-            all_articles.append(article)
+    for source_list in [kb_articles, filtered_realtime, local_articles]:
+        for article in source_list:
+            title = article.get("title", "").lower()[:40]
+            if title and title not in seen_titles:
+                seen_titles.add(title)
+                all_articles.append(article)
 
     for article in all_articles:
         cred = float(article.get("credibility_score", 0.5))
         relev = float(article.get("relevance_score", 0.3))
-        rt_bonus = 0.1 if article.get("is_realtime") else 0
-        article["combined_score"] = round((cred * 0.4) + (relev * 0.4) + rt_bonus, 3)
+        article["combined_score"] = round((cred * 0.4) + (relev * 0.4), 3)
 
     all_articles.sort(key=lambda item: item.get("combined_score", 0), reverse=True)
     final = all_articles[:5]

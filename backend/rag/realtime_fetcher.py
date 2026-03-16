@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
@@ -44,6 +45,24 @@ SOURCE_CREDIBILITY = {
     "vishvasnews.com": {"score": 0.90, "logo": "✅", "type": "Fact Checker", "name": "Vishvas News", "country": "India"},
 }
 
+RSS_FEEDS = {
+    "Reuters World": "https://feeds.reuters.com/reuters/worldNews",
+    "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
+    "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
+    "NDTV": "https://feeds.feedburner.com/ndtvnews-top-stories",
+    "The Hindu": "https://www.thehindu.com/news/feeder/default.rss",
+    "Indian Express": "https://indianexpress.com/feed/",
+    "Hindustan Times": "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
+}
+
+STOP_WORDS = {
+    "is", "are", "was", "were", "the", "a", "an", "in", "of", "to", "and", "or", "that", "this",
+    "it", "for", "on", "with", "at", "by", "from", "will", "would", "could", "should", "may", "might",
+    "can", "than", "then", "be", "been", "have", "has", "had", "do", "does", "did", "not", "no",
+    "yes", "i", "my", "your", "he", "she", "they", "we", "started", "year", "time", "current",
+    "claim", "says", "about", "into", "after", "before", "over", "under", "news",
+}
+
 
 def get_source_credibility(url: str) -> Dict:
     if not url:
@@ -53,6 +72,43 @@ def get_source_credibility(url: str) -> Dict:
         if domain in lowered:
             return info
     return {"score": 0.55, "logo": "⚪", "type": "Unknown Source", "name": "Unknown Source", "country": "Unknown"}
+
+
+def extract_relevance_terms(text: str) -> dict:
+    words = [word for word in re.findall(r"[a-z0-9]+", text.lower()) if len(word) > 2 and word not in STOP_WORDS]
+    unique_words = sorted(set(words))
+
+    phrases = set()
+    for size in (3, 2):
+        for index in range(len(words) - size + 1):
+            phrase_words = words[index:index + size]
+            if len(set(phrase_words)) == size:
+                phrases.add(" ".join(phrase_words))
+
+    return {"words": unique_words, "phrases": sorted(phrases)}
+
+
+def is_relevant(claim: str, article: dict, threshold: float = 0.15) -> bool:
+    terms = extract_relevance_terms(claim)
+    claim_words = terms["words"]
+    claim_phrases = terms["phrases"]
+
+    if not claim_words:
+        return True
+
+    title = article.get("title", "").lower()
+    content = article.get("content", "").lower()
+    keywords = " ".join(article.get("keywords", []) or []).lower()
+    combined = f"{title} {content} {keywords}"
+
+    word_matches = sum(1 for word in claim_words if word in combined)
+    phrase_matches = sum(1 for phrase in claim_phrases if phrase in combined)
+
+    if claim_phrases and phrase_matches == 0 and word_matches < min(2, len(claim_words)):
+        return False
+
+    overlap = (word_matches + (2 * phrase_matches)) / max(len(claim_words) + (2 * len(claim_phrases)), 1)
+    return overlap >= threshold
 
 
 def get_sources_registry() -> List[Dict]:
@@ -157,6 +213,7 @@ def fetch_newsapi(query: str, max_results: int = 10) -> List[Dict]:
                     "category": "realtime",
                     "is_realtime": True,
                     "image_url": item.get("urlToImage", ""),
+                    "keywords": [word for word in re.findall(r"[a-z0-9]+", f"{item.get('title', '')} {item.get('description', '')}".lower()) if len(word) > 3],
                 }
             )
 
@@ -213,6 +270,7 @@ def fetch_gdelt_free(query: str, max_results: int = 5) -> List[Dict]:
                     "category": "realtime",
                     "is_realtime": True,
                     "image_url": "",
+                    "keywords": [word for word in re.findall(r"[a-z0-9]+", item.get("title", "").lower()) if len(word) > 3],
                 }
             )
 
@@ -224,28 +282,20 @@ def fetch_gdelt_free(query: str, max_results: int = 5) -> List[Dict]:
 
 
 def fetch_rss_feeds(query: str) -> List[Dict]:
-    rss_feeds = {
-        "Reuters World": "https://feeds.reuters.com/reuters/worldNews",
-        "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
-        "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
-        "NDTV": "https://feeds.feedburner.com/ndtvnews-top-stories",
-        "The Hindu": "https://www.thehindu.com/news/feeder/default.rss",
-        "Indian Express": "https://indianexpress.com/feed/",
-        "Hindustan Times": "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
-    }
-
-    query_words = set(query.lower().split())
+    terms = extract_relevance_terms(query)
     articles = []
 
-    for source_name, feed_url in rss_feeds.items():
+    for source_name, feed_url in RSS_FEEDS.items():
         try:
             feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:20]:
+            for entry in feed.entries[:30]:
                 title = entry.get("title", "").lower()
                 summary = entry.get("summary", "").lower()
-                relevant = any(word in title or word in summary for word in query_words if len(word) > 3)
+                combined = f"{title} {summary}"
+                phrase_match = any(phrase in combined for phrase in terms["phrases"])
+                word_hits = sum(1 for word in terms["words"] if word in combined)
 
-                if not relevant:
+                if not phrase_match and word_hits == 0:
                     continue
 
                 pub_date = "Recent"
@@ -276,6 +326,7 @@ def fetch_rss_feeds(query: str) -> List[Dict]:
                         "category": "realtime",
                         "is_realtime": True,
                         "image_url": "",
+                        "keywords": [word for word in re.findall(r"[a-z0-9]+", combined) if len(word) > 3],
                     }
                 )
         except Exception as exc:
@@ -310,8 +361,14 @@ def fetch_realtime_evidence(claim: str, max_results: int = 10) -> List[Dict]:
             seen_urls.add(url)
             unique.append(article)
 
-    unique.sort(key=lambda item: item.get("credibility_score", 0), reverse=True)
-    final = unique[:max_results]
+    relevant = [article for article in unique if is_relevant(claim, article, threshold=0.10)]
+    print(f"[NewsAPI] {len(unique)} fetched, {len(relevant)} relevant after filter")
+
+    if len(relevant) < 2:
+        relevant = [article for article in unique if is_relevant(claim, article, threshold=0.05)]
+
+    relevant.sort(key=lambda item: item.get("credibility_score", 0), reverse=True)
+    final = relevant[:max_results]
 
     cache[cache_key] = {
         "articles": final,
@@ -320,5 +377,5 @@ def fetch_realtime_evidence(claim: str, max_results: int = 10) -> List[Dict]:
     }
     save_cache(cache)
 
-    print(f"Real-time: {len(final)} unique articles found")
+    print(f"Real-time: {len(final)} relevant articles found")
     return final

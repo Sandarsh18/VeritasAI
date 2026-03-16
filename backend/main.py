@@ -49,10 +49,10 @@ from routers.auth_router import router as auth_router
 from routers.user_router import router as user_router
 
 AGENT_MODELS = {
-    "prosecutor": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-    "defender": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-    "judge": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-    "claim_analyzer": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    "prosecutor": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    "defender": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    "judge": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    "claim_analyzer": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
     "fallback": "llama3.2:1b",
 }
 
@@ -74,7 +74,7 @@ def _ts() -> str:
 
 
 def warmup_models() -> None:
-    models = sorted(set(AGENT_MODELS.values()))
+    models = [AGENT_MODELS["fallback"]]
     for model in models:
         try:
             print(f"[WARMUP] Loading {model}...")
@@ -360,6 +360,32 @@ def factual_guardrail(claim: str) -> dict | None:
             "key_evidence": ["Narendra Modi currently holds the Prime Minister's office in India."],
         }
 
+    if "world war 2" in compact or "ww2" in compact:
+        year_match = re.search(r"(19\d{2}|20\d{2})", compact)
+        if year_match:
+            year = int(year_match.group(1))
+            if year == 1939 and "not" not in compact:
+                return {
+                    "verdict": "TRUE",
+                    "confidence": 97,
+                    "reasoning": "This claim is true. World War 2 began in 1939 when Germany invaded Poland, triggering declarations of war from Britain and France.",
+                    "recommendation": "For historical-date claims, cross-check against standard history references and primary-source timelines.",
+                    "key_evidence": [
+                        "World War 2 started on 1 September 1939.",
+                        "The invasion of Poland is the accepted start of the war in Europe.",
+                    ],
+                }
+            return {
+                "verdict": "FALSE",
+                "confidence": 96,
+                "reasoning": "This claim is false. World War 2 started in 1939, not in the year stated in the claim.",
+                "recommendation": "Use established historical timelines for major war chronology claims.",
+                "key_evidence": [
+                    "World War 2 began in 1939 when Germany invaded Poland.",
+                    "The war ended in 1945, so later start dates like 2000 are impossible.",
+                ],
+            }
+
     if compact in {"earth is flat", "the earth is flat"}:
         return {
             "verdict": "FALSE",
@@ -385,6 +411,18 @@ def factual_guardrail(claim: str) -> dict | None:
             "reasoning": "This claim is false. Major public health bodies and large-scale studies have found no evidence that COVID vaccines cause infertility.",
             "recommendation": "For health claims, verify against WHO, CDC, and peer-reviewed medical evidence.",
             "key_evidence": ["No credible clinical evidence supports infertility caused by COVID vaccination."],
+        }
+
+    if "5g" in compact and ("coronavirus" in compact or "covid" in compact):
+        return {
+            "verdict": "FALSE",
+            "confidence": 96,
+            "reasoning": "This claim is false. 5G networks do not transmit viruses, and COVID-19 spreads through infection by the SARS-CoV-2 virus rather than radio waves.",
+            "recommendation": "For health and telecom claims, rely on WHO guidance and established scientific explanations of disease transmission.",
+            "key_evidence": [
+                "Viruses cannot be carried by radio signals.",
+                "COVID-19 is a viral disease spread through biological transmission pathways.",
+            ],
         }
 
     if "vaccines contain microchips" in compact:
@@ -493,33 +531,6 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
             "message": "No relevant fact-checked articles found for this specific claim.",
         }
 
-    if evidence_result.get("insufficient_evidence"):
-        result = {
-            "cached": False,
-            "claim": claim,
-            "claim_id": None,
-            "claim_type": claim_type,
-            "verdict": "UNVERIFIED",
-            "confidence": 30,
-            "reasoning": f"No relevant fact-checked articles found for this specific claim about '{claim}'.",
-            "recommendation": "This claim may be too specific or niche for our current evidence database.",
-            "key_evidence": [],
-            "claim_analysis": claim_analysis,
-            "evidence": [],
-            "evidence_summary": build_evidence_metadata_summary([], 0, 0),
-            "prosecutor": {"arguments": [], "strongest_point": "No relevant evidence"},
-            "defender": {"arguments": [], "strongest_point": "No relevant evidence"},
-            "misinformation_analysis": {
-                "source_tracking": {},
-                "online_presence": {},
-                "is_tracked": False,
-            },
-            "pipeline_note": "Insufficient evidence",
-        }
-        if not quick:
-            result["claim_id"] = await persist_result(claim, result["verdict"], result["confidence"], [])
-        return result
-
     evidence = evidence_result.get("articles", [])
     realtime_count = int(evidence_result.get("realtime_count", sum(1 for item in evidence if item.get("is_realtime"))))
     archive_count = int(evidence_result.get("archive_count", sum(1 for item in evidence if not item.get("is_realtime"))))
@@ -548,6 +559,9 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
         )
     evidence = normalized_evidence
     evidence_summary_meta = build_evidence_metadata_summary(evidence, realtime_count, archive_count)
+
+    if evidence_result.get("insufficient_evidence"):
+        print("[PIPELINE] No relevant retrieved evidence; continuing with judge knowledge fallback")
 
     print(f"[{_ts()}] RAG done: {len(evidence)} articles")
 
