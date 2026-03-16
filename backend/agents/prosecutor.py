@@ -2,57 +2,45 @@ from llm_client import call_llm, extract_json
 
 
 def run_prosecutor(claim: str, evidence: list) -> dict:
-    ev_text = ""
-    for i, article in enumerate(evidence[:4], 1):
-        ev_text += (
-            f"\nArticle {i}: {article.get('title', '')}\n"
-            f"Source: {article.get('source', 'Unknown')} (credibility: {float(article.get('credibility_score', 0.5)):.0%})\n"
-            f"Content: {article.get('content', '')[:300]}\n"
-        )
+    ev_text = "\n".join(
+        [
+            f"- [{article.get('source', '?')}]: {article.get('title', '')} — {article.get('content', '')[:200]}"
+            for article in evidence[:3]
+        ]
+    ) or "No articles available."
 
-    if not ev_text:
-        ev_text = "No specific articles available."
+    prompt = f"""You are a fact-checking prosecutor.
 
-    prompt = f"""You are a rigorous fact-checking prosecutor.
+CLAIM: "{claim}"
 
-CLAIM TO ANALYZE: "{claim}"
-
-AVAILABLE EVIDENCE:
+EVIDENCE:
 {ev_text}
 
-YOUR TASK: Find arguments that CONTRADICT or DISPROVE the claim: "{claim}"
+Find arguments CONTRADICTING "{claim}".
+Use your knowledge AND the evidence above.
 
-CRITICAL RULES:
-1. Only argue about "{claim}" specifically
-2. Only cite evidence directly related to this claim
-3. If evidence is about a different topic, ignore it
-4. Use your knowledge + the evidence provided
-5. Be factually accurate — do not fabricate
+If claim is TRUE (like "light faster than sound"):
+  state that prosecution is weak.
+If claim is FALSE (like "mobile used for cooking"):
+  state phones are electronic communication/computing
+  devices, not cooking appliances.
 
-For scientific claims like "light is faster than sound":
-- Use known scientific facts (speed of light ~300,000 km/s, speed of sound ~343 m/s in air)
-- This would be a VERY WEAK prosecution (claim is true)
-
-Return ONLY valid JSON:
+Return JSON ONLY:
 {{
   "arguments": [
-    "Specific point 1 directly about the claim",
-    "Specific point 2 with source citation if available"
+    "First specific argument against the claim",
+    "Second argument with evidence or known fact"
   ],
-  "strongest_point": "The most important contradicting argument, or 'No strong contradictions found' if claim appears true",
+  "strongest_point": "Most important contradiction",
   "prosecution_strength": "strong|moderate|weak|none"
 }}"""
 
-    raw = call_llm(prompt, max_tokens=400, agent_name="Prosecutor")
+    raw = call_llm(prompt, 400, 0.1, "Prosecutor")
     result = extract_json(raw)
-
     if not result or not result.get("arguments"):
         return {
-            "arguments": ["No strong contradicting evidence found"],
-            "strongest_point": "No strong contradictions found",
+            "arguments": ["Insufficient evidence to prosecute"],
+            "strongest_point": "Unable to find contradictions",
             "prosecution_strength": "none",
         }
-
-    if "prosecution_strength" not in result:
-        result["prosecution_strength"] = "weak"
     return result

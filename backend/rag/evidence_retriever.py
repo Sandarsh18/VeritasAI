@@ -105,6 +105,12 @@ def retrieve_evidence(claim: str) -> dict:
     print(f"\n[RAG] Claim: '{claim[:60]}'")
 
     kb_articles = search_knowledge_base(claim, top_k=2)
+    for article in kb_articles:
+        score = compute_relevance(claim, article)
+        article["relevance_score"] = round(score, 3)
+        article["keyword_match"] = round(score, 3)
+        article.setdefault("is_realtime", False)
+        article.setdefault("evidence_source", "knowledge_base")
     print(f"[RAG] Knowledge base: {len(kb_articles)} articles")
 
     local_articles = search_local(claim, top_k=2, min_vector_sim=0.15, min_keyword_match=0.15)
@@ -120,8 +126,9 @@ def retrieve_evidence(claim: str) -> dict:
     filtered_realtime = []
     for article in realtime_articles:
         kw_score = compute_relevance(claim, article)
-        if kw_score >= 0.10:
+        if kw_score >= 0.20:
             article["relevance_score"] = round(kw_score, 3)
+            article["keyword_match"] = round(kw_score, 3)
             filtered_realtime.append(article)
 
     print(f"[RAG] Real-time after filter: {len(filtered_realtime)}")
@@ -129,8 +136,13 @@ def retrieve_evidence(claim: str) -> dict:
     all_articles = []
     seen_titles = set()
 
+    min_final_relevance = 0.18
+
     for source_list in [kb_articles, filtered_realtime, local_articles]:
         for article in source_list:
+            relevance_score = float(article.get("relevance_score", compute_relevance(claim, article)))
+            if relevance_score < min_final_relevance:
+                continue
             title = article.get("title", "").lower()[:40]
             if title and title not in seen_titles:
                 seen_titles.add(title)
@@ -139,7 +151,7 @@ def retrieve_evidence(claim: str) -> dict:
     for article in all_articles:
         cred = float(article.get("credibility_score", 0.5))
         relev = float(article.get("relevance_score", 0.3))
-        article["combined_score"] = round((cred * 0.4) + (relev * 0.4), 3)
+        article["combined_score"] = round((cred * 0.45) + (relev * 0.55), 3)
 
     all_articles.sort(key=lambda item: item.get("combined_score", 0), reverse=True)
     final = all_articles[:5]

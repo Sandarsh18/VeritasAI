@@ -120,7 +120,7 @@ export default function Home() {
   }, [handleVerify]);
 
   return (
-    <main style={{ maxWidth: 900, margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
+    <main className="home-main" style={{ maxWidth: 1280, width: '100%', margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
       {result?.verdict === 'TRUE' && <Confetti recycle={false} numberOfPieces={160} />}
       {/* Hero */}
       <motion.div

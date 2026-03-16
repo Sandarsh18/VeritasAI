@@ -49,10 +49,10 @@ from routers.auth_router import router as auth_router
 from routers.user_router import router as user_router
 
 AGENT_MODELS = {
-    "prosecutor": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-    "defender": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-    "judge": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-    "claim_analyzer": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+    "prosecutor": os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct"),
+    "defender": os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct"),
+    "judge": os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct"),
+    "claim_analyzer": os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct"),
     "fallback": "llama3.2:1b",
 }
 
@@ -137,8 +137,8 @@ def check_ollama() -> bool:
         return False
 
 
-def check_gemini_config() -> bool:
-    return bool(os.getenv("GEMINI_API_KEY")) and os.getenv("USE_GEMINI", "true").lower() == "true"
+def check_nvidia_config() -> bool:
+    return bool(os.getenv("NVIDIA_API_KEY")) and os.getenv("USE_NVIDIA", "true").lower() == "true"
 
 
 def check_faiss() -> bool:
@@ -346,6 +346,18 @@ def factual_guardrail(claim: str) -> dict | None:
             ],
         }
 
+    if "water boils at 100" in compact and "celsius" in compact:
+        return {
+            "verdict": "TRUE",
+            "confidence": 90,
+            "reasoning": "This claim is generally true under standard atmospheric conditions. Pure water boils at 100°C at around 1 atmosphere pressure.",
+            "recommendation": "Boiling temperature varies with pressure and altitude, so include conditions for precision.",
+            "key_evidence": [
+                "Standard boiling point reference is 100°C at sea level (1 atm).",
+                "Pressure changes shift boiling points upward or downward.",
+            ],
+        }
+
     if (
         ("narendra modi" in compact or re.search(r"\bmodi\b", compact))
         and "pm" in compact
@@ -411,6 +423,23 @@ def factual_guardrail(claim: str) -> dict | None:
             "reasoning": "This claim is false. Major public health bodies and large-scale studies have found no evidence that COVID vaccines cause infertility.",
             "recommendation": "For health claims, verify against WHO, CDC, and peer-reviewed medical evidence.",
             "key_evidence": ["No credible clinical evidence supports infertility caused by COVID vaccination."],
+        }
+
+    if compact in {
+        "mobile is used as tool for cooking",
+        "mobile is used as a tool for cooking",
+        "mobile used for cooking",
+        "phones are used for cooking",
+    }:
+        return {
+            "verdict": "FALSE",
+            "confidence": 94,
+            "reasoning": "This claim is false. Mobile phones are electronic devices used for communication and computing, not cooking appliances.",
+            "recommendation": "Differentiate communication tools from household cooking equipment before sharing such claims.",
+            "key_evidence": [
+                "Mobile phones are designed for communication, apps, and internet tasks.",
+                "Cooking requires heat-producing appliances like stoves, ovens, or microwaves.",
+            ],
         }
 
     if "5g" in compact and ("coronavirus" in compact or "covid" in compact):
@@ -584,7 +613,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
     except asyncio.TimeoutError:
         judge_result = {
             "verdict": "UNVERIFIED",
-            "confidence": 35,
+                "confidence": 42,
             "reasoning": "Analysis timed out. Please retry.",
             "key_evidence": [],
             "recommendation": "Retry the claim for full analysis",
@@ -627,7 +656,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
 
 @app.get("/health")
 async def health():
-    gemini_ok = await asyncio.to_thread(check_gemini_config)
+    nvidia_ok = await asyncio.to_thread(check_nvidia_config)
     ollama_ok = await asyncio.to_thread(check_ollama)
     neo4j_ok = await asyncio.to_thread(is_connected)
     faiss_ok = await asyncio.to_thread(check_faiss)
@@ -643,8 +672,8 @@ async def health():
         db_ok = False
 
     return {
-        "status": "healthy" if ((gemini_ok or ollama_ok) and faiss_ok and db_ok) else "degraded",
-        "gemini": "configured" if gemini_ok else "not_configured",
+        "status": "healthy" if ((nvidia_ok or ollama_ok) and faiss_ok and db_ok) else "degraded",
+        "nvidia": "configured" if nvidia_ok else "not_configured",
         "ollama": "connected" if ollama_ok else "disconnected",
         "neo4j": "connected" if neo4j_ok else "disconnected",
         "database": "connected" if db_ok else "disconnected",
@@ -715,7 +744,7 @@ async def verify_claim(
         return {
             "claim_type": "factual_claim",
             "verdict": "UNVERIFIED",
-            "confidence": 35,
+            "confidence": 40,
             "reasoning": "Analysis took too long. Try a shorter claim.",
             "claim": claim,
             "misinformation_analysis": {
@@ -741,7 +770,7 @@ async def verify_claim_quick(request: ClaimRequest):
         return {
             "claim_type": "factual_claim",
             "verdict": "UNVERIFIED",
-            "confidence": 35,
+            "confidence": 40,
             "reasoning": "Quick analysis timed out. Please retry.",
             "claim": claim,
             "misinformation_analysis": {
