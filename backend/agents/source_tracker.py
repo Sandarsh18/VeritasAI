@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-import requests
+from llm_client import call_llm
 
 
 def track_misinformation_source(
@@ -80,23 +80,12 @@ Return ONLY valid JSON:
 }}"""
 
     try:
-        resp = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3.2:1b",
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "num_predict": 300,
-                    "temperature": 0,
-                    "num_ctx": 512,
-                },
-                "keep_alive": "10m",
-            },
-            timeout=60,
+        raw = call_llm(
+            prompt,
+            max_tokens=350,
+            temperature=0.1,
+            agent_name="SourceTracker",
         )
-
-        raw = resp.json().get("response", "")
 
         start = raw.find("{")
         end = raw.rfind("}") + 1

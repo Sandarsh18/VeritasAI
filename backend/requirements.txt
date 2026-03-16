@@ -18,3 +18,4 @@ httpx
 aiohttp
 beautifulsoup4
 requests-cache
+google-generativeai

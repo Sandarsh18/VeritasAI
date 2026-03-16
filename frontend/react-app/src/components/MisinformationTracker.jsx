@@ -65,9 +65,19 @@ export default function MisinformationTracker({ data, verdict }) {
       </Section>
 
       <Section title="📱 SPREADING ON">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="platforms-grid">
           {(tracking.spreading_platforms || []).slice(0, 8).map((platform, idx) => (
-            <span key={`${platform}-${idx}`} className="source-badge">
+            <span key={`${platform}-${idx}`} style={{
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.40)',
+              color: '#fca5a5',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'inline-block',
+              margin: '4px',
+            }}>
               {platform}
             </span>
           ))}

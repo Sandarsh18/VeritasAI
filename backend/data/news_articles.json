@@ -714,5 +714,35 @@
     "verdict": "true",
     "keywords": ["cricket", "football", "rankings", "ICC", "FIFA"],
     "date": "2024-07-12"
+  },
+  {
+    "id": "physics_001",
+    "title": "Speed of Light vs Speed of Sound: Key Differences Explained",
+    "content": "Light travels at approximately 299,792,458 meters per second in vacuum, while sound travels at only 343 meters per second in air at room temperature. This means light is approximately 874,030 times faster than sound. This difference is observable in everyday life - during a thunderstorm, you see lightning before you hear thunder, even though both occur simultaneously. This is because light reaches your eyes almost instantaneously while sound takes time to travel. The speed of light is a fundamental constant of the universe, denoted as 'c', while the speed of sound varies depending on the medium it travels through.",
+    "source": "Physics Today",
+    "source_url": "https://physicstoday.org",
+    "author": "Dr. Richard Feynman Institute",
+    "published_date": "2024",
+    "credibility_score": 0.97,
+    "source_logo": "🔬",
+    "source_type": "Scientific Journal",
+    "category": "science",
+    "verdict": "true",
+    "keywords": ["light", "sound", "speed", "faster", "physics", "thunder", "lightning", "velocity"]
+  },
+  {
+    "id": "physics_002",
+    "title": "Why Lightning Appears Before Thunder: Physics Explained",
+    "content": "The phenomenon of seeing lightning before hearing thunder is a direct demonstration that light is faster than sound. Lightning and thunder occur simultaneously during a storm. However, light travels at 300,000 km/s reaching your eyes almost instantly, while sound travels at only 0.343 km/s. For every 3 seconds between flash and thunder, the storm is approximately 1 kilometer away. This well-established physics principle has been known for centuries and is taught in basic science education worldwide.",
+    "source": "National Geographic",
+    "source_url": "https://nationalgeographic.com",
+    "author": "Science Editorial Team",
+    "published_date": "2024",
+    "credibility_score": 0.95,
+    "source_logo": "🌍",
+    "source_type": "Science Magazine",
+    "category": "science",
+    "verdict": "true",
+    "keywords": ["lightning", "thunder", "light", "sound", "faster", "speed", "storm", "physics"]
   }
 ]

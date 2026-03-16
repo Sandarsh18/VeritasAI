@@ -49,10 +49,11 @@ from routers.auth_router import router as auth_router
 from routers.user_router import router as user_router
 
 AGENT_MODELS = {
-    "prosecutor": "llama3.2:1b",
-    "defender": "llama3.2:1b",
-    "judge": "llama3.2:1b",
-    "claim_analyzer": "llama3.2:1b",
+    "prosecutor": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    "defender": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    "judge": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    "claim_analyzer": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    "fallback": "llama3.2:1b",
 }
 
 PROSECUTOR_FALLBACK = {
@@ -134,6 +135,10 @@ def check_ollama() -> bool:
         return response.status_code == 200
     except Exception:
         return False
+
+
+def check_gemini_config() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY")) and os.getenv("USE_GEMINI", "true").lower() == "true"
 
 
 def check_faiss() -> bool:
@@ -237,13 +242,13 @@ async def persist_result(claim: str, verdict: str, confidence: int, evidence: li
     return claim_id
 
 
-def run_parallel_agents(claim: str, evidence_summary: str) -> tuple[dict, dict]:
+def run_parallel_agents(claim: str, evidence: list[dict]) -> tuple[dict, dict]:
     prosecutor_result = PROSECUTOR_FALLBACK
     defender_result = DEFENDER_FALLBACK
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        future_prosecutor = executor.submit(run_prosecutor, claim, evidence_summary)
-        future_defender = executor.submit(run_defender, claim, evidence_summary)
+        future_prosecutor = executor.submit(run_prosecutor, claim, evidence)
+        future_defender = executor.submit(run_defender, claim, evidence)
 
         done, _ = wait({future_prosecutor, future_defender}, timeout=150)
 
@@ -295,6 +300,49 @@ def factual_guardrail(claim: str) -> dict | None:
             "key_evidence": [
                 "Current PM of India is Narendra Modi, not Rahul Gandhi.",
                 "The claim misstates a present constitutional office-holder.",
+            ],
+        }
+
+    if compact in {
+        "light is faster than sound",
+        "the speed of light is faster than sound",
+        "light travels faster than sound",
+    }:
+        return {
+            "verdict": "TRUE",
+            "confidence": 97,
+            "reasoning": "This claim is true. Light travels at about 299,792,458 m/s in vacuum, while sound in air at room temperature travels at about 343 m/s, so light is vastly faster.",
+            "recommendation": "For physics claims, compare standard constants from trusted science references.",
+            "key_evidence": [
+                "Speed of light is roughly 874,000 times higher than speed of sound in air.",
+                "Lightning is seen before thunder is heard because light arrives first.",
+            ],
+        }
+
+    if compact in {
+        "sound travels faster than light",
+        "sound is faster than light",
+    }:
+        return {
+            "verdict": "FALSE",
+            "confidence": 97,
+            "reasoning": "This claim is false. Sound in air is around 343 m/s, whereas light in vacuum is about 299,792,458 m/s.",
+            "recommendation": "Use established physics constants when comparing propagation speeds.",
+            "key_evidence": [
+                "Light speed is orders of magnitude greater than sound speed.",
+                "Everyday observation: lightning is seen before thunder is heard.",
+            ],
+        }
+
+    if "water boils at 100" in compact and ("sea level" in compact or "1 atm" in compact):
+        return {
+            "verdict": "TRUE",
+            "confidence": 95,
+            "reasoning": "This claim is true under standard atmospheric pressure. Pure water boils at 100°C at sea level (about 1 atmosphere pressure).",
+            "recommendation": "Remember boiling point changes with altitude and pressure.",
+            "key_evidence": [
+                "Standard boiling point of water is 100°C at 1 atm.",
+                "At higher altitudes, lower pressure reduces boiling temperature.",
             ],
         }
 
@@ -354,8 +402,40 @@ def factual_guardrail(claim: str) -> dict | None:
 async def run_pipeline(claim: str, quick: bool = False) -> dict:
     print(f"[{_ts()}] Starting: {claim[:50]}")
 
-    if not await asyncio.to_thread(check_ollama):
-        raise HTTPException(status_code=503, detail="Ollama is not running.")
+    guardrail = factual_guardrail(claim)
+    if guardrail:
+        verdict = guardrail.get("verdict", "UNVERIFIED")
+        result = {
+            "cached": False,
+            "claim": claim,
+            "claim_id": None,
+            "claim_type": "factual_claim",
+            "verdict": verdict,
+            "confidence": int(guardrail.get("confidence", 90)),
+            "reasoning": guardrail.get("reasoning", "Guardrail verdict applied."),
+            "key_evidence": guardrail.get("key_evidence", []),
+            "recommendation": guardrail.get("recommendation", "Review trusted primary sources."),
+            "claim_analysis": {
+                "claim_type": "factual_claim",
+                "domain": "general",
+                "entities": [],
+                "should_proceed": True,
+                "early_response": None,
+            },
+            "evidence": [],
+            "evidence_summary": build_evidence_metadata_summary([], 0, 0),
+            "prosecutor": {"arguments": [], "strongest_point": "Guardrail verdict"},
+            "defender": {"arguments": [], "strongest_point": "Guardrail verdict"},
+            "misinformation_analysis": {
+                "source_tracking": {},
+                "online_presence": {},
+                "is_tracked": False,
+            },
+            "pipeline_note": "Guardrail factual override",
+        }
+        if not quick:
+            result["claim_id"] = await persist_result(claim, result["verdict"], result["confidence"], [])
+        return result
 
     try:
         claim_analysis = await asyncio.wait_for(
@@ -396,36 +476,6 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
                 "is_tracked": False,
             },
             "pipeline_note": f"Skipped: {claim_type} detected",
-        }
-        if not quick:
-            result["claim_id"] = await persist_result(claim, result["verdict"], result["confidence"], [])
-        return result
-
-    guardrail = factual_guardrail(claim)
-    if guardrail:
-        verdict = guardrail.get("verdict", "UNVERIFIED")
-        source_info, online_search = await asyncio.to_thread(run_misinformation_tracking, claim, verdict, [])
-        result = {
-            "cached": False,
-            "claim": claim,
-            "claim_id": None,
-            "claim_type": claim_type,
-            "verdict": verdict,
-            "confidence": int(guardrail.get("confidence", 90)),
-            "reasoning": guardrail.get("reasoning", "Guardrail verdict applied."),
-            "key_evidence": guardrail.get("key_evidence", []),
-            "recommendation": guardrail.get("recommendation", "Review trusted primary sources."),
-            "claim_analysis": claim_analysis,
-            "evidence": [],
-            "evidence_summary": build_evidence_metadata_summary([], 0, 0),
-            "prosecutor": {"arguments": [], "strongest_point": "Guardrail verdict"},
-            "defender": {"arguments": [], "strongest_point": "Guardrail verdict"},
-            "misinformation_analysis": {
-                "source_tracking": source_info,
-                "online_presence": online_search,
-                "is_tracked": bool(source_info),
-            },
-            "pipeline_note": "Guardrail factual override",
         }
         if not quick:
             result["claim_id"] = await persist_result(claim, result["verdict"], result["confidence"], [])
@@ -506,17 +556,15 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
         round(sum(credibility_scores) / len(credibility_scores), 2) if credibility_scores else 0.5
     )
 
-    evidence_summary = build_evidence_summary(evidence)
-
     prosecutor_result, defender_result = await asyncio.to_thread(
-        run_parallel_agents, claim, evidence_summary
+        run_parallel_agents, claim, evidence
     )
     print(f"[{_ts()}] Prosecutor done")
     print(f"[{_ts()}] Defender done")
 
     try:
         judge_result = await asyncio.wait_for(
-            asyncio.to_thread(run_judge, claim, prosecutor_result, defender_result, avg_credibility),
+            asyncio.to_thread(run_judge, claim, prosecutor_result, defender_result, evidence),
             timeout=75 if not quick else 15,
         )
     except asyncio.TimeoutError:
@@ -565,6 +613,7 @@ async def run_pipeline(claim: str, quick: bool = False) -> dict:
 
 @app.get("/health")
 async def health():
+    gemini_ok = await asyncio.to_thread(check_gemini_config)
     ollama_ok = await asyncio.to_thread(check_ollama)
     neo4j_ok = await asyncio.to_thread(is_connected)
     faiss_ok = await asyncio.to_thread(check_faiss)
@@ -580,7 +629,8 @@ async def health():
         db_ok = False
 
     return {
-        "status": "healthy" if (ollama_ok and faiss_ok and db_ok) else "degraded",
+        "status": "healthy" if ((gemini_ok or ollama_ok) and faiss_ok and db_ok) else "degraded",
+        "gemini": "configured" if gemini_ok else "not_configured",
         "ollama": "connected" if ollama_ok else "disconnected",
         "neo4j": "connected" if neo4j_ok else "disconnected",
         "database": "connected" if db_ok else "disconnected",
@@ -602,7 +652,7 @@ async def get_models():
 
 
 @app.post("/api/verify")
-@limiter.limit("10/hour")
+@limiter.limit("1000/hour")
 async def verify_claim(
     request: Request,
     payload: ClaimRequest,

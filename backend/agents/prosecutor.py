@@ -1,75 +1,58 @@
-import re
+from llm_client import call_llm, extract_json
 
 
-PROMPT_TEMPLATE = """You are a fact-checking prosecutor analyzing a SPECIFIC claim.
+def run_prosecutor(claim: str, evidence: list) -> dict:
+    ev_text = ""
+    for i, article in enumerate(evidence[:4], 1):
+        ev_text += (
+            f"\nArticle {i}: {article.get('title', '')}\n"
+            f"Source: {article.get('source', 'Unknown')} (credibility: {float(article.get('credibility_score', 0.5)):.0%})\n"
+            f"Content: {article.get('content', '')[:300]}\n"
+        )
 
-CLAIM TO ANALYZE: '{claim}'
+    if not ev_text:
+        ev_text = "No specific articles available."
 
-RELEVANT EVIDENCE ARTICLES:
-{evidence_text}
+    prompt = f"""You are a rigorous fact-checking prosecutor.
 
-YOUR TASK:
-Find arguments that CONTRADICT or DISPROVE the claim above.
+CLAIM TO ANALYZE: "{claim}"
+
+AVAILABLE EVIDENCE:
+{ev_text}
+
+YOUR TASK: Find arguments that CONTRADICT or DISPROVE the claim: "{claim}"
 
 CRITICAL RULES:
-1. ONLY use information from the provided articles
-2. ONLY include arguments directly related to: '{claim}'
-3. If the articles are NOT relevant to the claim, say so
-4. Do NOT mix information from different unrelated topics
-5. Each argument must mention the source article
+1. Only argue about "{claim}" specifically
+2. Only cite evidence directly related to this claim
+3. If evidence is about a different topic, ignore it
+4. Use your knowledge + the evidence provided
+5. Be factually accurate — do not fabricate
 
-If no relevant contradicting evidence exists in articles:
-Return: {"arguments": [], "strongest_point": "No contradicting evidence found in available articles for this specific claim"}
-"""
+For scientific claims like "light is faster than sound":
+- Use known scientific facts (speed of light ~300,000 km/s, speed of sound ~343 m/s in air)
+- This would be a VERY WEAK prosecution (claim is true)
 
-FALLBACK = {
-    "arguments": [],
-    "strongest_point": "No contradicting evidence found in available articles for this specific claim",
-}
+Return ONLY valid JSON:
+{{
+  "arguments": [
+    "Specific point 1 directly about the claim",
+    "Specific point 2 with source citation if available"
+  ],
+  "strongest_point": "The most important contradicting argument, or 'No strong contradictions found' if claim appears true",
+  "prosecution_strength": "strong|moderate|weak|none"
+}}"""
 
+    raw = call_llm(prompt, max_tokens=400, agent_name="Prosecutor")
+    result = extract_json(raw)
 
-def _parse_articles(evidence_summary: str) -> list[dict]:
-    articles = []
-    for block in evidence_summary.split("ARTICLE "):
-        block = block.strip()
-        if not block:
-            continue
-        fields = {}
-        for line in block.splitlines()[1:]:
-            if ":" not in line:
-                continue
-            key, value = line.split(":", 1)
-            fields[key.strip().lower()] = value.strip()
-        articles.append(fields)
-    return articles
+    if not result or not result.get("arguments"):
+        return {
+            "arguments": ["No strong contradicting evidence found"],
+            "strongest_point": "No strong contradictions found",
+            "prosecution_strength": "none",
+        }
 
-
-def _first_sentence(text: str) -> str:
-    parts = re.split(r"(?<=[.!?])\s+", text.strip())
-    return parts[0].strip() if parts and parts[0].strip() else text.strip()
-
-
-def prosecute(claim: str, evidence_summary: str) -> dict:
-    articles = _parse_articles(evidence_summary)
-    arguments = []
-
-    for article in articles:
-        verdict_label = article.get("verdict label", "").lower()
-        if verdict_label not in {"false", "misleading"}:
-            continue
-        source = article.get("source", "Unknown source")
-        title = article.get("title", "Untitled article")
-        content = _first_sentence(article.get("content", ""))
-        qualifier = "partially contradicts" if verdict_label == "misleading" else "contradicts"
-        arguments.append(f"[{source}] {title} {qualifier} '{claim}': {content}"[:260])
-
-    if not arguments:
-        return FALLBACK.copy()
-
-    return {
-        "arguments": arguments[:4],
-        "strongest_point": arguments[0][:260],
-    }
-
-
-run_prosecutor = prosecute
+    if "prosecution_strength" not in result:
+        result["prosecution_strength"] = "weak"
+    return result

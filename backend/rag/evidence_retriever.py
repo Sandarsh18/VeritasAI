@@ -18,12 +18,42 @@ def load_index():
         with open("data/news_articles.json", "r", encoding="utf-8") as file:
             data = json.load(file)
         ARTICLES = data if isinstance(data, list) else data.get("articles", [])
-        print(f"FAISS: {len(ARTICLES)} local articles")
+        print(f"FAISS loaded: {len(ARTICLES)} articles")
     except Exception as exc:
         print(f"FAISS load error: {exc}")
 
 
-def search_local(claim: str, top_k: int = 5) -> list:
+def compute_relevance(claim: str, article: dict) -> float:
+    claim_words = set(claim.lower().split())
+    stop_words = {
+        "is", "are", "was", "were", "the", "a", "an",
+        "in", "of", "to", "and", "or", "that", "this",
+        "it", "for", "on", "with", "at", "by", "from",
+        "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "can", "than", "then",
+    }
+    claim_words -= stop_words
+
+    if not claim_words:
+        return 0.3
+
+    title = article.get("title", "").lower()
+    content = article.get("content", "").lower()
+    keywords = article.get("keywords", [])
+    keywords_text = " ".join([item.lower() for item in keywords])
+    combined = f"{title} {content} {keywords_text}"
+
+    matches = sum(1 for word in claim_words if word in combined and len(word) > 2)
+    return matches / max(len(claim_words), 1)
+
+
+def search_local(
+    claim: str,
+    top_k: int = 5,
+    min_vector_sim: float = 0.15,
+    min_keyword_match: float = 0.10,
+) -> list:
     if INDEX is None:
         load_index()
     if INDEX is None or not ARTICLES:
@@ -31,20 +61,30 @@ def search_local(claim: str, top_k: int = 5) -> list:
 
     try:
         embedding = MODEL.encode([claim])
-        distances, indices = INDEX.search(np.array(embedding).astype("float32"), top_k * 2)
+        k = min(top_k * 4, len(ARTICLES))
+        distances, indices = INDEX.search(np.array(embedding).astype("float32"), k)
 
         results = []
         for dist, idx in zip(distances[0], indices[0]):
-            if idx == -1 or idx >= len(ARTICLES):
+            if idx < 0 or idx >= len(ARTICLES):
                 continue
 
-            similarity = float(1 / (1 + dist))
-            if similarity < 0.20:
+            vector_sim = float(1 / (1 + dist))
+            if vector_sim < min_vector_sim:
                 continue
 
             article = ARTICLES[idx].copy()
-            article["relevance_score"] = round(similarity, 3)
+
+            keyword_score = compute_relevance(claim, article)
+            if keyword_score < min_keyword_match:
+                continue
+
+            combined_score = (vector_sim * 0.5) + (keyword_score * 0.5)
+            article["relevance_score"] = round(combined_score, 3)
+            article["vector_similarity"] = round(vector_sim, 3)
+            article["keyword_match"] = round(keyword_score, 3)
             article["is_realtime"] = False
+            article["evidence_source"] = "archive"
             article["source_url"] = article.get("source_url", "")
             article["author"] = article.get("author", "Editorial Team")
             article["published_date"] = article.get("published_date", "2024")
@@ -54,6 +94,7 @@ def search_local(claim: str, top_k: int = 5) -> list:
             results.append(article)
 
         results.sort(key=lambda item: item["relevance_score"], reverse=True)
+        print(f"[RAG Local] {len(results)} articles passed dual filter")
         return results[:top_k]
     except Exception as exc:
         print(f"Local search error: {exc}")
@@ -61,29 +102,40 @@ def search_local(claim: str, top_k: int = 5) -> list:
 
 
 def retrieve_evidence(claim: str) -> dict:
-    print(f"\n[RAG] Retrieving evidence for: {claim[:60]}")
+    print(f"\n[RAG] Claim: '{claim[:60]}'")
 
-    local_articles = search_local(claim, top_k=3)
-    print(f"[RAG] Local: {len(local_articles)} articles")
+    local_articles = search_local(claim, top_k=3, min_vector_sim=0.15, min_keyword_match=0.10)
+    print(f"[RAG] Local: {len(local_articles)} relevant articles")
 
-    realtime_articles = fetch_realtime_evidence(claim, max_results=7)
-    print(f"[RAG] Real-time: {len(realtime_articles)} articles")
+    realtime_articles = []
+    try:
+        realtime_articles = fetch_realtime_evidence(claim, max_results=7)
+        print(f"[RAG] Real-time: {len(realtime_articles)} articles")
+    except Exception as exc:
+        print(f"[RAG] Real-time error: {exc}")
+
+    filtered_realtime = []
+    for article in realtime_articles:
+        kw_score = compute_relevance(claim, article)
+        if kw_score >= 0.05:
+            article["relevance_score"] = round(kw_score, 3)
+            filtered_realtime.append(article)
+
+    print(f"[RAG] Real-time after filter: {len(filtered_realtime)}")
 
     all_articles = []
     seen_titles = set()
 
-    for article in realtime_articles:
-        title = article.get("title", "").lower()[:50]
-        if title and title not in seen_titles:
+    for article in filtered_realtime:
+        title = article.get("title", "").lower()[:40]
+        if title not in seen_titles:
             seen_titles.add(title)
-            article["evidence_source"] = "real-time"
             all_articles.append(article)
 
     for article in local_articles:
-        title = article.get("title", "").lower()[:50]
-        if title and title not in seen_titles:
+        title = article.get("title", "").lower()[:40]
+        if title not in seen_titles:
             seen_titles.add(title)
-            article["evidence_source"] = "archive"
             all_articles.append(article)
 
     for article in all_articles:
@@ -95,17 +147,22 @@ def retrieve_evidence(claim: str) -> dict:
     all_articles.sort(key=lambda item: item.get("combined_score", 0), reverse=True)
     final = all_articles[:5]
 
+    print(f"[RAG] Final: {len(final)} articles")
+    for article in final:
+        rt = "🌐" if article.get("is_realtime") else "📁"
+        print(
+            f"  {rt} {article.get('source', '?'):15} | "
+            f"kw={float(article.get('keyword_match', 0)):.2f} | "
+            f"vec={float(article.get('vector_similarity', 0)):.2f} | "
+            f"title={article.get('title', '')[:40]}"
+        )
+
     if not final:
         return {
             "articles": [],
             "insufficient_evidence": True,
             "message": "No relevant articles found",
         }
-
-    print(f"[RAG] Final: {len(final)} combined articles")
-    for article in final:
-        marker = "🌐 LIVE" if article.get("is_realtime") else "📁 ARCHIVE"
-        print(f"  {marker} | {article.get('source', '?')} | score={article.get('combined_score', '?')}")
 
     return {
         "articles": final,

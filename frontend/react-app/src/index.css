@@ -1,3 +1,154 @@
+/* ══ GLOBAL TEXT VISIBILITY EMERGENCY FIX ══ */
+
+* {
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  color: #f1f5f9 !important;
+  background: #0a0a12;
+}
+
+.glass-card *,
+[class*="card"] *,
+[class*="panel"] * {
+  color: inherit;
+}
+
+[class*="recommendation"] {
+  background: rgba(99,102,241,0.15) !important;
+  border: 1px solid rgba(99,102,241,0.35) !important;
+  color: #e0e7ff !important;
+  padding: 12px 16px !important;
+  border-radius: 10px !important;
+}
+[class*="recommendation"] * {
+  color: #e0e7ff !important;
+}
+[class*="recommendation"] span:first-child {
+  color: #a5b4fc !important;
+  font-weight: 700 !important;
+}
+
+[class*="warning"] {
+  color: #fde68a !important;
+}
+
+[class*="tracker-label"],
+[class*="section-label"] {
+  color: #94a3b8 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  margin-bottom: 6px !important;
+}
+
+[class*="tracker-section"] > *:not(:first-child) {
+  color: #e2e8f0 !important;
+}
+
+[class*="how-to-spot"] li,
+[class*="tips"] li {
+  color: #cbd5e1 !important;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+[class*="who-benefits"] {
+  color: #fde68a !important;
+}
+
+[class*="fact-checked"] {
+  color: #6ee7b7 !important;
+}
+
+[class*="evidence"] h3,
+[class*="evidence"] .title {
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+}
+[class*="evidence"] p,
+[class*="evidence"] .content {
+  color: #cbd5e1 !important;
+  line-height: 1.6 !important;
+}
+[class*="evidence"] .author {
+  color: #a5b4fc !important;
+}
+[class*="evidence"] .date {
+  color: #64748b !important;
+}
+
+[class*="score-label"],
+[class*="bar-label"] {
+  color: #94a3b8 !important;
+  font-size: 12px !important;
+}
+[class*="score-pct"],
+[class*="bar-pct"] {
+  color: #e2e8f0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+[class*="reasoning"] {
+  color: #e2e8f0 !important;
+  line-height: 1.7 !important;
+  font-size: 15px !important;
+}
+
+[class*="key-evidence"] li,
+[class*="key-evidence"] span {
+  color: #cbd5e1 !important;
+}
+
+[class*="stat-number"],
+[class*="stats"] h2,
+[class*="stats"] .number {
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+}
+[class*="stat-label"],
+[class*="stats"] .label {
+  color: #94a3b8 !important;
+}
+
+[class*="history"] [class*="claim-text"] {
+  color: #f1f5f9 !important;
+  font-weight: 500 !important;
+}
+[class*="history"] [class*="date"] {
+  color: #64748b !important;
+  font-size: 12px !important;
+}
+
+html.light body,
+body.light {
+  color: #0f172a !important;
+  background: #f8fafc !important;
+}
+html.light [class*="recommendation"] {
+  color: #312e81 !important;
+}
+html.light [class*="recommendation"] * {
+  color: #312e81 !important;
+}
+html.light [class*="tracker-section"] > * {
+  color: #1e293b !important;
+}
+html.light [class*="evidence"] p,
+html.light [class*="evidence"] .content {
+  color: #334155 !important;
+}
+html.light [class*="reasoning"] {
+  color: #1e293b !important;
+}
+html.light [class*="score-label"] {
+  color: #64748b !important;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {

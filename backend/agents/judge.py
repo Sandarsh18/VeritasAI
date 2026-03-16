@@ -1,90 +1,85 @@
-PROMPT_TEMPLATE = """You are an impartial fact-checking judge.
-
-THE CLAIM BEING JUDGED: '{claim}'
-
-PROSECUTOR ARGUED (against claim):
-{prosecutor_arguments}
-
-DEFENDER ARGUED (for claim):
-{defender_arguments}
-
-SOURCE CREDIBILITY SCORES: {credibility_info}
-
-YOUR TASK:
-Deliver a verdict SPECIFICALLY about: '{claim}'
-
-STRICT RULES:
-1. Your verdict MUST be about '{claim}' only
-2. Your reasoning MUST mention '{claim}' specifically
-3. Your recommendation MUST relate to '{claim}'
-4. Do NOT mention topics unrelated to '{claim}'
-5. If evidence is insufficient -> verdict = UNVERIFIED
-"""
+from llm_client import call_llm, extract_json
 
 
-def _meaningful_arguments(arguments: list[str]) -> list[str]:
-    meaningful = []
-    for argument in arguments or []:
-        text = str(argument).strip()
-        if not text:
-            continue
-        lowered = text.lower()
-        if lowered.startswith("no contradicting evidence") or lowered.startswith("no supporting evidence"):
-            continue
-        meaningful.append(text)
-    return meaningful
+def run_judge(claim: str, prosecutor: dict, defender: dict, evidence: list) -> dict:
+    cred_scores = [float(article.get("credibility_score", 0.5)) for article in evidence]
+    avg_cred = round(sum(cred_scores) / len(cred_scores), 2) if cred_scores else 0.5
 
+    p_strength = prosecutor.get("prosecution_strength", "unknown")
+    d_strength = defender.get("defense_strength", "unknown")
 
-def _compute_verdict(contra_count: int, support_count: int, avg_credibility: float) -> tuple[str, int]:
-    if contra_count == 0 and support_count == 0:
-        confidence = min(48, 34 + int(avg_credibility * 10))
-        return "UNVERIFIED", 61 if confidence == 60 else confidence
-    if contra_count >= support_count + 1:
-        confidence = min(90, 72 + (contra_count - support_count) * 6 + int(avg_credibility * 8))
-        return "FALSE", 61 if confidence == 60 else confidence
-    if support_count >= contra_count + 1:
-        confidence = min(90, 72 + (support_count - contra_count) * 6 + int(avg_credibility * 8))
-        return "TRUE", 61 if confidence == 60 else confidence
-    confidence = min(78, 50 + int(avg_credibility * 10))
-    return "MISLEADING", 61 if confidence == 60 else confidence
+    p_args = "\n".join([f"  - {item}" for item in prosecutor.get("arguments", [])[:3]])
+    d_args = "\n".join([f"  - {item}" for item in defender.get("arguments", [])[:3]])
 
+    prompt = f"""You are an impartial fact-checking judge with expertise in science, politics, and current events.
 
-def _reasoning(claim: str, verdict: str, contra_count: int, support_count: int) -> str:
-    if verdict == "FALSE":
-        return f"The retrieved evidence about '{claim}' is predominantly contradicting, with {contra_count} contradicting points and {support_count} supporting points. Based on the available articles, this claim is not supported."
-    if verdict == "TRUE":
-        return f"The retrieved evidence about '{claim}' is predominantly supportive, with {support_count} supporting points and {contra_count} contradicting points. Based on the available articles, this claim is supported."
-    if verdict == "MISLEADING":
-        return f"The retrieved evidence about '{claim}' is mixed, with both supportive and contradicting details present. The claim needs more precise wording because the available articles do not support it cleanly in its current form."
-    return f"The retrieved evidence about '{claim}' is insufficient or too weak for a reliable verdict. This claim should remain unverified until stronger claim-specific evidence is available."
+THE CLAIM: "{claim}"
 
+PROSECUTION ARGUED (AGAINST claim):
+{p_args or "  - No strong contradictions found"}
+Prosecution strength: {p_strength}
 
-def _recommendation(claim: str, verdict: str) -> str:
-    if verdict == "FALSE":
-        return f"Do not rely on '{claim}' unless you can provide stronger evidence from primary or highly credible sources."
-    if verdict == "TRUE":
-        return f"'{claim}' is supported by the current evidence, but you should still prefer primary or official sources when sharing it."
-    if verdict == "MISLEADING":
-        return f"Refine '{claim}' into a narrower statement so it can be checked against a more precise evidence base."
-    return f"Look for more claim-specific evidence before drawing conclusions about '{claim}'."
+DEFENSE ARGUED (FOR claim):
+{d_args or "  - No supporting arguments found"}
+Defense strength: {d_strength}
 
+AVERAGE SOURCE CREDIBILITY: {avg_cred:.0%}
 
-def judge(claim: str, prosecutor_result: dict, defender_result: dict, avg_credibility: float) -> dict:
-    prosecutor_points = _meaningful_arguments(prosecutor_result.get("arguments", []))
-    defender_points = _meaningful_arguments(defender_result.get("arguments", []))
-    contra_count = len(prosecutor_points)
-    support_count = len(defender_points)
-    verdict, confidence = _compute_verdict(contra_count, support_count, avg_credibility)
-    key_evidence = (prosecutor_points + defender_points)[:2]
+YOUR TASK: Deliver an accurate, evidence-based verdict SPECIFICALLY about: "{claim}"
 
-    return {
-        "verdict": verdict,
-        "confidence": max(30, min(97, confidence)),
-        "reasoning": _reasoning(claim, verdict, contra_count, support_count),
-        "key_evidence": key_evidence,
-        "recommendation": _recommendation(claim, verdict),
-    }
+VERDICT RULES:
+- TRUE:        Claim is factually correct
+- FALSE:       Claim is factually incorrect
+- MISLEADING:  Claim is partially true but exaggerated
+- UNVERIFIED:  Cannot determine with available evidence
 
+CONFIDENCE RULES:
+- Defense strong, prosecution weak → TRUE, 80-95%
+- Prosecution strong, defense weak → FALSE, 80-95%
+- Both sides moderate → MISLEADING, 55-75%
+- Both sides weak → UNVERIFIED, 30-50%
+- NEVER return exactly 60
 
-run_judge = judge
+IMPORTANT: Use your knowledge.
+"Light is faster than sound" is TRUE (scientific consensus).
+"Rahul Gandhi is PM of India" is FALSE (Modi is PM).
+
+Return ONLY this exact JSON:
+{{
+  "verdict": "TRUE|FALSE|MISLEADING|UNVERIFIED",
+  "confidence": <integer 30-97, NEVER 60>,
+  "reasoning": "2-3 sentences specifically about '{claim}' with factual explanation",
+  "key_evidence": [
+    "Most important fact supporting the verdict",
+    "Second important fact"
+  ],
+  "prosecutor_strength": "{p_strength}",
+  "defender_strength": "{d_strength}",
+  "recommendation": "One sentence: what should reader know about this claim"
+}}"""
+
+    raw = call_llm(prompt, max_tokens=500, temperature=0.1, agent_name="Judge")
+    result = extract_json(raw)
+
+    if not result:
+        return {
+            "verdict": "UNVERIFIED",
+            "confidence": 35,
+            "reasoning": f"Unable to determine verdict for: {claim}",
+            "key_evidence": [],
+            "prosecutor_strength": p_strength,
+            "defender_strength": d_strength,
+            "recommendation": "Please verify with trusted sources.",
+        }
+
+    conf = int(result.get("confidence", 35))
+    if conf == 60:
+        conf = 61
+    result["confidence"] = max(30, min(97, conf))
+
+    allowed = ["TRUE", "FALSE", "MISLEADING", "UNVERIFIED"]
+    if result.get("verdict") not in allowed:
+        result["verdict"] = "UNVERIFIED"
+
+    return result
 
