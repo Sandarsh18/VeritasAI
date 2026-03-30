@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>react-app</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      (function () {
+        try {
+          const key = "veritas-sw-cleaned";
+          const alreadyCleaned = sessionStorage.getItem(key) === "1";
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+              for (const registration of registrations) {
+                await registration.unregister();
+              }
+              if (window.caches && caches.keys) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map((name) => caches.delete(name)));
+              }
+              if (!alreadyCleaned) {
+                sessionStorage.setItem(key, "1");
+                window.location.reload();
+              }
+            });
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
