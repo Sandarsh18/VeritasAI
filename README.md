@@ -1,106 +1,163 @@
+<div align="center">
+
 # VeritasAI
 
-VeritasAI is a full-stack claim verification platform that combines retrieval, ranking, and multi-agent reasoning to produce a verdict with confidence, evidence, and explainability.
+### Fake News ❌ -> Facts ✅
 
-## What Is New
+<p>
+  <img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=22&duration=2500&pause=700&color=22C55E&center=true&vCenter=true&width=760&lines=Multi-Agent+Claim+Verification+Platform;RAG+%2B+Evidence+Ranking+%2B+Debate+Reasoning;Explainable+Verdict%3A+TRUE+%7C+FALSE+%7C+MISLEADING+%7C+UNVERIFIED" alt="typing banner" />
+</p>
 
-- Source-backed reasoning points now explicitly show:
-  - prosecutor evidence and source URL
-  - defender evidence and source URL
-  - final decision line
-- Verdict insight block now includes:
-  - support vs contradict source counts
+<p>
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
+  <img src="https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite&logoColor=white" />
+  <img src="https://img.shields.io/badge/FAISS-Vector%20Search-7B61FF?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Neo4j-Optional-008CC1?style=for-the-badge&logo=neo4j&logoColor=white" />
+</p>
+
+<p>
+  <img src="https://img.shields.io/badge/Status-Operational-22C55E?style=flat-square" />
+  <img src="https://img.shields.io/badge/Reasoning-Source%20Backed-0EA5E9?style=flat-square" />
+  <img src="https://img.shields.io/badge/UI-Animated-F97316?style=flat-square" />
+  <img src="https://img.shields.io/badge/Verdict%20Insights-Enabled-A855F7?style=flat-square" />
+</p>
+
+</div>
+
+---
+
+## Why VeritasAI? 🧠
+
+VeritasAI is an explainable fact-checking workflow that does not just return a label.
+It retrieves evidence from the web, compares supportive and contradictory sources, runs prosecutor and defender reasoning, and produces a transparent verdict with confidence and citations.
+
+### Core outcomes
+
+- Evidence-first verification, not blind LLM output
+- Multi-agent argument structure for clearer decision trails
+- Source-linked reasoning points for both sides
+- Fast UI with history replay and cached claim refresh
+
+---
+
+## What Is New (Latest Upgrades) ✨
+
+### Reasoning and verdict quality
+
+- Prosecutor and defender reasoning now includes explicit source references
+- Verdict insight block includes:
+  - support vs contradict counts
   - top supporting source
   - top contradictory source
-  - short summary
-- Balanced agent cards:
-  - prosecutor and defender each return at least 3 points to avoid sparse UI cards
-- Retrieval breadth increased:
-  - SerpAPI and NewsAPI now fetch larger candidate sets before filtering/ranking
-- UI polish:
-  - all cards use consistent shadow/border style
-  - hover effect is centered (both-side glow), not one-sided lift
+  - concise summary of final decision
+- Balanced card output: both prosecutor and defender now show minimum multi-point arguments
 
-## Tech Stack
+### Retrieval and ranking
 
-### Backend
+- Increased retrieval breadth from search providers before ranking
+- Better support/contradict partitioning before verdict synthesis
+- FAISS ranking remains in the loop for top evidence selection
 
-- FastAPI
-- SQLAlchemy + SQLite
-- Gemini and fallback LLM path
-- FAISS + sentence-transformers for ranking
-- SerpAPI + NewsAPI retrieval
-- Optional Neo4j graph store
+### Frontend UX
 
-### Frontend
+- Unified card shadows and visual consistency
+- Symmetric hover effects (both-side glow)
+- Richer top verdict section (no more empty-looking MISLEADING card)
 
-- React + Vite
-- Framer Motion
-- React Router
-- Chart.js + react-chartjs-2
+---
 
-## Architecture
+## Product Snapshot 🎯
 
 ```mermaid
 flowchart LR
-    A[User claim] --> B[SerpAPI retrieval]
-    A --> C[NewsAPI retrieval]
-    B --> D[Merge and dedupe]
-    C --> D
-    D --> E[Quality filters]
-    E --> F[FAISS ranking]
-    F --> G[Top evidence context]
-    G --> H[Prosecutor path]
-    G --> I[Defender path]
-    H --> J[Judge verdict]
-    I --> J
-    J --> K[Reasoning + verdict insights]
-    K --> L[Store history in SQLite]
-    K --> M[Frontend cards and charts]
+    U[User claim] --> R[Web retrieval]
+    R --> F[Filtering + quality checks]
+    F --> V[Vector ranking FAISS]
+    V --> P[Prosecutor reasoning]
+    V --> D[Defender reasoning]
+    P --> J[Judge synthesis]
+    D --> J
+    J --> O[Verdict + confidence + source-backed reasoning]
+    O --> H[History + analytics]
 ```
 
-## Request Lifecycle
+---
+
+## End-to-End Pipeline ⚙️
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant API as FastAPI
-    participant R as Retriever
-    participant A as Agents
+    participant User
+    participant Frontend
+    participant API
+    participant Search as Search APIs
+    participant Ranker as FAISS Ranker
+    participant Agents as Prosecutor/Defender/Judge
     participant DB as SQLite
 
-    U->>FE: Submit claim
-    FE->>API: POST /api/verify
-    API->>R: fetch web evidence
-    R-->>API: merged candidates
-    API->>API: filter + FAISS rank
-    API->>A: prosecutor, defender, judge
-    A-->>API: verdict and arguments
-    API->>API: build reasoning_points and verdict_insights
-    API->>DB: save history row
-    API-->>FE: full verification payload
-    FE-->>U: render pipeline, verdict, reasoning, agents, evidence
+    User->>Frontend: Submit claim
+    Frontend->>API: POST /api/verify
+    API->>Search: SerpAPI + NewsAPI fetch
+    Search-->>API: Candidate evidence
+    API->>Ranker: Rank and shortlist
+    Ranker-->>API: Top evidence context
+    API->>Agents: Multi-agent reasoning
+    Agents-->>API: Verdict + arguments
+    API->>API: Build verdict_insights + reasoning_points
+    API->>DB: Save history snapshot
+    API-->>Frontend: Structured response
+    Frontend-->>User: Cards, sources, confidence, reasoning
 ```
 
-## Response Composition
+---
 
-```mermaid
-flowchart TD
-    A[Ranked evidence] --> B[Support vs contradict split]
-    B --> C[Prosecutor points]
-    B --> D[Defender points]
-    C --> E[Point augmentation to minimum bullets]
-    D --> E
-    E --> F[Reasoning points with source URLs]
-    E --> G[Verdict insights block]
-    F --> H[API response]
-    G --> H
+## Feature Highlights 🛡️
+
+| Area | Capability |
+|---|---|
+| Evidence | Multi-source retrieval with dedupe and filtering |
+| Ranking | FAISS similarity ranking for top context |
+| Reasoning | Prosecutor vs Defender source-backed analysis |
+| Verdict | TRUE/FALSE/MISLEADING/UNVERIFIED + confidence |
+| Explainability | Reasoning points with direct URLs |
+| Persistence | Claim history with replay support |
+| UI | Animated pipeline, confidence meter, evidence cards |
+| Optional graph | Neo4j integration for graph storage |
+
+---
+
+## Project Structure 📁
+
+```text
+fake-news-ai/
+├── backend/
+│   ├── main.py
+│   ├── retrieval.py
+│   ├── rag.py
+│   ├── agents.py
+│   ├── graph.py
+│   ├── requirements.txt
+│   └── rag/
+│       ├── vector_store.py
+│       ├── embeddings.py
+│       ├── evidence_retriever.py
+│       └── realtime_fetcher.py
+└── frontend/react-app/
+    ├── src/
+    │   ├── pages/
+    │   ├── components/
+    │   └── services/
+    ├── package.json
+    └── vite.config.js
 ```
 
-## Run Locally
+---
 
-### 1) Backend
+## Quick Start 🚀
+
+### Backend
 
 ```bash
 cd fake-news-ai/backend
@@ -110,12 +167,7 @@ pip install -r requirements.txt
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Notes:
-
-- Run from the backend directory to keep SQLite and log files scoped there.
-- Avoid using backend/start.sh as-is until import/path issues are corrected.
-
-### 2) Frontend
+### Frontend
 
 ```bash
 cd fake-news-ai/frontend/react-app
@@ -123,25 +175,38 @@ npm install --legacy-peer-deps
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-Open:
+### Open
 
 - Frontend: http://localhost:5173
 - Backend docs: http://localhost:8000/docs
 
-## Environment Variables
+---
 
-Create fake-news-ai/backend/.env with keys for your providers.
+## Environment Variables 🔐
 
-Typical values:
+Create backend/.env and configure:
 
-- GEMINI_API_KEY
-- OLLAMA_URL and OLLAMA_MODEL
-- NEWSAPI_KEY
-- SERPAPI_KEY
-- DATABASE_URL (default sqlite:///./veritas.db)
-- Optional NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+```env
+GEMINI_API_KEY=your_key
+GEMINI_MODEL=gemini-2.5-flash
 
-## API Endpoints
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:1b
+
+NEWSAPI_KEY=your_key
+SERPAPI_KEY=your_key
+
+DATABASE_URL=sqlite:///./veritas.db
+
+# Optional
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+```
+
+---
+
+## API Endpoints 🧩
 
 - POST /api/verify
 - POST /api/verify/quick
@@ -152,42 +217,72 @@ Typical values:
 - POST /api/auth/login/
 - GET /api/auth/me/
 
-## Generated Files And Cleanup
+---
 
-When backend runs from fake-news-ai/backend, these files are expected there:
+## Data and Runtime Files 🗃️
+
+Expected generated files inside backend:
 
 - backend/veritas.db
 - backend/veritas_debug.log
-- backend/server.log (if your launch command redirects output)
+- backend/server.log (if redirected)
 
-If you see duplicates in the workspace root, they are usually old artifacts from running commands from the wrong directory and can be deleted safely:
+If duplicates appear at workspace root, they are typically old artifacts and can be cleaned.
 
-- veritas.db
-- veritas_debug.log
-- server.log
-- temporary root test scripts such as test_ verify.py, test_final.py, tmp_script.py (if you no longer use them)
-- root package.json, package-lock.json, node_modules (only needed if you intentionally use root-level Tailwind tooling)
+---
 
-Keep the actual app dependencies and node_modules under:
+## Troubleshooting 🛠️
 
-- fake-news-ai/frontend/react-app
+<details>
+<summary><b>Backend returns fallback or low-quality output</b></summary>
 
-## Troubleshooting
-
-1. Backend returns fallback output
-
-- Check backend logs in backend/veritas_debug.log
 - Verify API keys in backend/.env
+- Check backend/veritas_debug.log
+- Confirm internet connectivity for external search APIs
 
-2. Blank or stale frontend output
+</details>
 
-- hard refresh browser
-- re-run npm run dev in frontend/react-app
+<details>
+<summary><b>Frontend looks stale after backend changes</b></summary>
 
-3. Neo4j warnings
+- Hard refresh browser
+- Restart frontend dev server
+- Re-run claim to bypass old cached card state
 
-- Neo4j is optional; app should continue without it
+</details>
 
-4. Large dependency downloads
+<details>
+<summary><b>Neo4j warnings</b></summary>
 
-- sentence-transformers pulls torch and related binaries; first install can be large
+Neo4j is optional. The system continues with SQLite and standard retrieval pipeline.
+
+</details>
+
+---
+
+## Roadmap 📌
+
+- Better source reliability scoring per domain family
+- Contradiction clustering and duplicate-claim linking
+- Claim-type specific templates (health, geopolitics, finance)
+- Exportable verification reports
+
+---
+
+## Contributing 🤝
+
+PRs are welcome.
+
+- Keep commits focused
+- Test backend API and frontend rendering
+- Include sample claim outputs for behavior-changing PRs
+
+---
+
+<div align="center">
+
+### Built for explainable misinformation analysis
+
+If this helped your project, give it a star ⭐
+
+</div>
