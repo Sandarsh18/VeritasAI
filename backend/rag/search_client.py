@@ -93,7 +93,10 @@ TRUSTED_NEWSAPI_DOMAINS = ",".join([
 RELEVANCE_STOPWORDS = {
     "the", "and", "for", "with", "from", "that", "this", "have",
     "has", "had", "into", "over", "under", "near", "about", "after",
-    "before", "today", "latest", "news", "right", "now", "nearly"
+    "before", "today", "latest", "news", "right", "now", "nearly",
+    "is", "are", "was", "were", "a", "an", "in", "of", "to", "or",
+    "by", "on", "at", "as", "it", "be", "been", "will", "can", "does",
+    "do", "did", "not", "no", "india", "new", "year", "2026", "2025", "2024"
 }
 
 
@@ -117,7 +120,18 @@ def _is_blood_group_query(query: str) -> bool:
 
 def _query_terms(query: str) -> list:
     tokens = re.findall(r"[a-z0-9]+", (query or "").lower())
-    return [t for t in tokens if len(t) >= 3 and t not in RELEVANCE_STOPWORDS]
+    return [
+        t for t in tokens
+        if len(t) >= 3 and t not in RELEVANCE_STOPWORDS and not t.isdigit()
+    ]
+
+
+def _build_search_query(query: str) -> str:
+    """Claim-focused query string using the most meaningful terms."""
+    terms = _query_terms(query)
+    if terms:
+        return " ".join(terms[:5])
+    return (query or "").strip()
 
 
 def _relevance_score(query: str, title: str, content: str = "") -> float:
@@ -129,13 +143,21 @@ def _relevance_score(query: str, title: str, content: str = "") -> float:
     matches = sum(1 for term in terms if term in haystack)
     base = matches / max(len(terms), 1)
 
+    phrases = [f"{terms[i]} {terms[i + 1]}" for i in range(len(terms) - 1)]
+    phrase_hits = sum(1 for phrase in phrases if phrase in haystack)
+    if phrase_hits:
+        base += min(0.4, phrase_hits * 0.2)
+
+    if len(terms) >= 3 and matches == 1:
+        base *= 0.4
+
     if _is_blood_group_query(query):
         query_groups = set(_extract_blood_groups(query))
         article_groups = set(_extract_blood_groups(haystack))
         if query_groups and article_groups and not query_groups.intersection(article_groups):
             base *= 0.4
 
-    return max(0.35, min(0.99, base))
+    return max(0.0, min(0.99, base))
 
 
 def _is_relevant_result(query: str, title: str, content: str = "") -> bool:
@@ -221,7 +243,8 @@ def search_newsapi(
         return []
 
     try:
-        print(f"[NewsAPI] Searching: '{query}'")
+        focused_query = _build_search_query(query)
+        print(f"[NewsAPI] Searching: '{focused_query}'")
         client = NewsApiClient(api_key=NEWSAPI_KEY)
 
         # For finance/commodity queries, use finance-specific domains only
@@ -230,7 +253,7 @@ def search_newsapi(
             "rate", "price", "stock", "sensex",
             "nifty", "commodity", "crude"
         ]
-        query_lower = query.lower()
+        query_lower = focused_query.lower()
         is_finance = any(
             fk in query_lower for fk in finance_keywords
         )
@@ -251,7 +274,7 @@ def search_newsapi(
             domains = TRUSTED_NEWSAPI_DOMAINS
 
         response = client.get_everything(
-            q=query,
+            q=focused_query,
             domains=domains,
             language="en",
             sort_by="relevancy",
@@ -270,7 +293,7 @@ def search_newsapi(
             content = (item.get("description") or
                        item.get("content") or "")
 
-            if not _is_relevant_result(query, title, content):
+            if not _is_relevant_result(focused_query, title, content):
                 continue
 
             if any(bk.lower() in url.lower()
@@ -283,7 +306,7 @@ def search_newsapi(
 
             source_name = (item.get("source", {})
                               .get("name", ""))
-            relevance = _relevance_score(query, title, content)
+            relevance = _relevance_score(focused_query, title, content)
 
             articles.append(make_article(
                 title=title,
@@ -314,7 +337,8 @@ def search_serpapi(
         print("[SerpAPI] No API key configured")
         return []
 
-    query_lower = (query or "").lower()
+    focused_query = _build_search_query(query)
+    query_lower = (focused_query or "").lower()
     
     # Detect finance/commodity queries
     finance_keywords = [
@@ -325,11 +349,11 @@ def search_serpapi(
         fk in query_lower for fk in finance_keywords
     )
     
-    is_blood_group = _is_blood_group_query(query)
+    is_blood_group = _is_blood_group_query(focused_query)
 
     if is_blood_group:
         search_query = (
-            f"{query} "
+            f"{focused_query} "
             f"site:redcrossblood.org OR "
             f"site:stanfordbloodcenter.org OR "
             f"site:nhs.uk OR "
@@ -338,7 +362,7 @@ def search_serpapi(
         )
     elif is_finance:
         search_query = (
-            f"{query} "
+            f"{focused_query} "
             f"site:economictimes.indiatimes.com OR "
             f"site:livemint.com OR "
             f"site:moneycontrol.com OR "
@@ -348,14 +372,14 @@ def search_serpapi(
         )
     else:
         search_query = (
-            f"{query} "
+            f"{focused_query} "
             f"site:reuters.com OR site:bbc.com OR "
             f"site:thehindu.com OR site:ndtv.com OR "
             f"site:apnews.com OR site:indianexpress.com"
         )
 
     try:
-        print(f"[SerpAPI] Searching: '{query}'")
+        print(f"[SerpAPI] Searching: '{focused_query}'")
         params = {
             "engine": "google",
             "q": search_query,
@@ -382,7 +406,7 @@ def search_serpapi(
             if not url or not title:
                 continue
 
-            if not _is_relevant_result(query, title, snippet):
+            if not _is_relevant_result(focused_query, title, snippet):
                 continue
 
             if any(bk.lower() in url.lower()
@@ -396,7 +420,7 @@ def search_serpapi(
                       f"{url}")
                 continue
 
-            relevance = _relevance_score(query, title, snippet)
+            relevance = _relevance_score(focused_query, title, snippet)
 
             articles.append(make_article(
                 title=title,

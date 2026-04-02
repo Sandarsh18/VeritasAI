@@ -527,6 +527,83 @@ def call_gemini_json(prompt, temperature=0.1,
                      context="judge") -> dict:
     return call_judge_json(prompt)
 
+
+def call_gemini(
+    prompt: str,
+    max_tokens: int = 1024,
+    agent_name: str = "agent",
+    temperature: float = 0.1,
+) -> str:
+    """Compatibility text API for callers expecting raw Gemini output."""
+    try:
+        return _call_gemini_raw(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except Exception as e:
+        print(f"[LLM:{agent_name}] call_gemini failed: {e}")
+        return ""
+
+
+def call_ollama(
+    prompt: str,
+    temperature: float = 0.1,
+    num_predict: int = 500,
+    num_ctx: int = 768,
+    agent_name: str = "agent",
+) -> str:
+    """Compatibility text API for callers expecting raw Ollama output."""
+    try:
+        return _call_ollama_raw(
+            prompt,
+            temperature=temperature,
+            num_predict=num_predict,
+            num_ctx=num_ctx,
+        )
+    except Exception as e:
+        print(f"[LLM:{agent_name}] call_ollama failed: {e}")
+        return ""
+
+
+def call_llm(
+    prompt: str,
+    max_tokens: int = 500,
+    agent_name: str = "agent",
+    temperature: float = 0.1,
+) -> str:
+    """
+    Compatibility text API used by diagnostics.
+    Tries Gemini -> Grok -> Ollama and returns empty string on total failure.
+    """
+    raw = call_gemini(
+        prompt=prompt,
+        max_tokens=max_tokens,
+        agent_name=agent_name,
+        temperature=temperature,
+    )
+    if raw:
+        return raw
+
+    try:
+        raw = _call_grok_raw(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        if raw:
+            return raw
+    except Exception as e:
+        print(f"[LLM:{agent_name}] call_llm Grok failed: {e}")
+
+    return call_ollama(
+        prompt=prompt,
+        temperature=temperature,
+        num_predict=max_tokens,
+        num_ctx=768,
+        agent_name=agent_name,
+    )
+
 # ═══════════════════════════════════════════════════════
 # CONNECTION TEST
 # ═══════════════════════════════════════════════════════

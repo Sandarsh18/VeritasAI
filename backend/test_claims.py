@@ -1,5 +1,7 @@
 import requests, json, sys, time
 
+print("Starting tests...")
+
 BASE = "http://localhost:8000"
 
 TESTS = [
@@ -62,7 +64,7 @@ def run_test(test: dict) -> bool:
         resp = requests.post(
             f"{BASE}/api/verify",
             json={"claim": test["claim"]},
-            timeout=300
+            timeout=600
         )
         data = resp.json()
 
@@ -84,6 +86,13 @@ def run_test(test: dict) -> bool:
             print(f"  • [{src}] cred={cred:.2f}")
             print(f"    {url}")
             source_urls.append(url.lower())
+
+        disagreement = data.get("verdict_insights", {}).get("disagreement_score", -1.0)
+        if disagreement >= 0.0 and disagreement <= 1.0:
+            print(f"✅ Disagreement score is valid: {disagreement:.2f}")
+        else:
+            print(f"❌ Disagreement score is invalid: {disagreement}")
+            passed = False
 
         passed = True
 

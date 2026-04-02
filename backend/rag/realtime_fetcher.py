@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List
 from urllib.parse import urlparse
 
@@ -56,6 +56,27 @@ def _source_from_title_or_domain(title: str, domain: str) -> str:
         if tail and len(tail) <= 50:
             return tail
     return domain
+
+
+def filter_old_articles(articles: list, max_age_days: int = 90) -> list:
+    """Remove articles older than max_age_days. Keep articles with no date."""
+    cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+    filtered = []
+    for article in articles:
+        pub_date = article.get("publishedAt") or article.get("published_date")
+        if not pub_date:
+            article["published_date"] = None
+            filtered.append(article)
+            continue
+        try:
+            parsed = datetime.fromisoformat(pub_date.replace("Z", "+00:00").replace("+00:00", ""))
+            if parsed >= cutoff:
+                article["published_date"] = parsed.strftime("%Y-%m-%d")
+                filtered.append(article)
+        except Exception:
+            article["published_date"] = None
+            filtered.append(article)
+    return filtered
 
 def fetch_rss_articles(keywords: List[str]) -> List[Dict]:
     """
@@ -189,4 +210,4 @@ def fetch_rss_articles(keywords: List[str]) -> List[Dict]:
         except Exception:
             pass
 
-    return matches
+    return filter_old_articles(matches)

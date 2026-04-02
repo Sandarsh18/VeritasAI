@@ -4,6 +4,7 @@ from typing import Dict, List
 
 import faiss
 import numpy as np
+from credibility import score_source
 
 
 def _tokenize(text: str) -> List[str]:
@@ -38,13 +39,25 @@ def rank_with_faiss(claim: str, results: List[Dict], top_k: int = 5) -> List[Dic
 
     query_vec = _hash_vector(claim).reshape(1, -1).astype("float32")
     k = min(max(1, top_k), len(results))
-    _, indices = index.search(query_vec, k)
+    distances, indices = index.search(query_vec, k)
 
     ranked = []
-    for idx in indices[0].tolist():
+    for i, idx in enumerate(indices[0].tolist()):
         row = dict(results[idx])
-        row.setdefault("score", None)
+        similarity = float(distances[0][i])
+        url = row.get("link") or row.get("source_url") or ""
+        credibility = score_source(url)
+
+        weighted_score = similarity * (0.5 + 0.5 * credibility)
+
+        row["similarity"] = similarity
+        row["credibility_score"] = credibility
+        row["weighted_score"] = weighted_score
         ranked.append(row)
+
+    # Re-sort by the new weighted score
+    ranked.sort(key=lambda x: x["weighted_score"], reverse=True)
+
     return ranked
 
 

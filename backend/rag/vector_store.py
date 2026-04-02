@@ -6,6 +6,7 @@ from typing import Dict, List
 import numpy as np
 
 from rag.embeddings import get_embedder
+from backend.credibility import score_source
 
 try:
     import faiss
@@ -81,36 +82,43 @@ def search(query: str, k: int = 20) -> List[Dict]:
     if _VECTORS_CACHE is None or len(_VECTORS_CACHE) == 0:
         return []
 
+    articles = load_articles()
     results = []
-    top_k = min(k, len(_VECTORS_CACHE))
+    top_k = min(k * 2, len(_VECTORS_CACHE)) # Fetch more to rerank
 
     if faiss is not None and _INDEX_CACHE is not None:
         distances, indices = _INDEX_CACHE.search(query_vector, top_k)
-        for idx, dist in zip(indices[0], distances[0]):
-            if idx < 0:
-                continue
-            similarity = 1.0 / (1.0 + float(dist))
-            if similarity >= 0.15:
-                results.append(
-                    {
-                        "index": int(idx),
-                        "distance": float(dist),
-                        "similarity": float(similarity),
-                    }
-                )
+        raw_results = zip(indices[0], distances[0])
     else:
         l2_distances = np.linalg.norm(_VECTORS_CACHE - query_vector[0], axis=1)
         sorted_indices = np.argsort(l2_distances)[:top_k]
-        for idx in sorted_indices:
-            dist = float(l2_distances[idx])
-            similarity = 1.0 / (1.0 + dist)
-            if similarity >= 0.15:
-                results.append(
-                    {
-                        "index": int(idx),
-                        "distance": dist,
-                        "similarity": float(similarity),
-                    }
-                )
+        raw_results = ((idx, l2_distances[idx]) for idx in sorted_indices)
 
-    return results
+    for idx, dist in raw_results:
+        if idx < 0:
+            continue
+        
+        similarity = 1.0 / (1.0 + float(dist))
+        if similarity < 0.15:
+            continue
+
+        article = articles[int(idx)]
+        credibility = score_source(article.get("link"))
+        
+        # Boost similarity with credibility score. Formula can be tuned.
+        # Example: 1.0 similarity + 1.0 credibility -> 1.5 weighted score
+        # Example: 0.8 similarity + 0.5 credibility -> 0.8 * 1.25 = 1.0 weighted
+        weighted_score = similarity * (1 + (credibility / 2))
+
+        results.append({
+            "index": int(idx),
+            "distance": float(dist),
+            "similarity": float(similarity),
+            "credibility_score": credibility,
+            "weighted_score": weighted_score,
+        })
+
+    # Sort by the new weighted score and take the top k
+    results.sort(key=lambda x: x["weighted_score"], reverse=True)
+    
+    return results[:k]

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import VerdictBadge from "../components/VerdictBadge";
-import { getHistory } from "../services/api";
+import { getHistoryResponse } from "../services/api";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -23,9 +23,30 @@ function History() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [hoveredClaim, setHoveredClaim] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+  const fetchHistory = async (token) => {
+    try {
+      const data = await getHistoryResponse(token);
+      setRows(data.claims || []);
+      const authState = Boolean(data.is_authenticated);
+      setIsAuthenticated(authState);
+      setShowLoginPrompt(!authState);
+    } catch (error) {
+      console.error("History fetch error:", error);
+      setRows([]);
+      setShowLoginPrompt(!token);
+    }
+  };
 
   useEffect(() => {
-    getHistory().then(setRows).catch(() => setRows([]));
+    const token =
+      localStorage.getItem("veritas-token") ||
+      sessionStorage.getItem("veritas-token") ||
+      null;
+    setIsAuthenticated(Boolean(token));
+    fetchHistory(token);
   }, []);
 
   return (
@@ -38,6 +59,22 @@ function History() {
     >
       <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)" }}>
         <h2>Claims History</h2>
+        {!isAuthenticated && showLoginPrompt && (
+          <div
+            style={{
+              background: "#fff7ed",
+              border: "1px solid #fed7aa",
+              borderRadius: "8px",
+              padding: "12px 16px",
+              marginBottom: "16px",
+              color: "#92400e",
+              fontSize: "14px",
+            }}
+          >
+            Showing last 5 recent claims.
+            <strong> Login to see your full personal history.</strong>
+          </div>
+        )}
         {!!hoveredClaim && (
           <motion.div
             className="history-hover-topic"

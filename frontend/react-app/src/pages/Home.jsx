@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 
 import AgentCard from "../components/AgentCard";
-import ConfidenceMeter from "../components/ConfidenceMeter";
+import ConfidenceGauge from "../components/ConfidenceGauge";
 import EvidenceCard from "../components/EvidenceCard";
 import VerdictBadge from "../components/VerdictBadge";
 import { getHistory, getHistoryDetails, verifyClaim } from "../services/api";
@@ -48,6 +48,18 @@ const itemVariants = {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const getDisagreementLabel = (score) => {
+  if (score > 0.7) return "High";
+  if (score > 0.4) return "Medium";
+  return "Low";
+};
+
+const getContentiousness = (score) => {
+  if (score >= 0.66) return { label: "High", color: "#ef4444" };
+  if (score >= 0.33) return { label: "Medium", color: "#f59e0b" };
+  return { label: "Low", color: "#22c55e" };
+};
+
 function Home() {
   const location = useLocation();
   const [claim, setClaim] = useState("");
@@ -57,6 +69,7 @@ function Home() {
   const [error, setError] = useState("");
   const [pipelineMessage, setPipelineMessage] = useState("");
   const [recentClaims, setRecentClaims] = useState([]);
+  const [copied, setCopied] = useState(false);
   const handledNavClaimRef = useRef("");
 
   const readResultCache = () => {
@@ -242,6 +255,15 @@ function Home() {
     setLoading(false);
     setActiveStep(0);
     setPipelineMessage("");
+    setCopied(false);
+  };
+
+  const copyShareLink = () => {
+    if (!result?.short_id) return;
+    const link = `http://localhost:8000/api/share/${result.short_id}`;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -365,6 +387,11 @@ function Home() {
                   <div className="verdict-counts">
                     <span className="insight-chip support-chip">Support: {result?.verdict_insights?.supporting_sources ?? 0}</span>
                     <span className="insight-chip contradict-chip">Contradict: {result?.verdict_insights?.contradicting_sources ?? 0}</span>
+                    {result?.verdict_insights?.disagreement_score != null && (
+                      <span className="insight-chip">
+                        Contentiousness: {getDisagreementLabel(result.verdict_insights.disagreement_score)}
+                      </span>
+                    )}
                   </div>
                   {(result?.verdict_insights?.top_supporting || []).length > 0 && (
                     <div className="insight-links">
@@ -384,7 +411,13 @@ function Home() {
                   )}
                 </div>
                 <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3, type: "spring" }}>
-                  <ConfidenceMeter value={Number(result.confidence) || 0} />
+                  <ConfidenceGauge confidence={(Number(result.confidence) || 0) / 100} />
+                  <div style={{ marginTop: "10px", fontSize: "0.9rem" }}>
+                    Claim Contentiousness:{" "}
+                    <span style={{ color: getContentiousness(result.disagreement_score ?? 0).color, fontWeight: 700 }}>
+                      {getContentiousness(result.disagreement_score ?? 0).label}
+                    </span>
+                  </div>
                 </motion.div>
               </motion.div>
 
@@ -405,6 +438,22 @@ function Home() {
             <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
               <h3>Claim</h3>
               <p>{result.claim || claim}</p>
+              {result?.short_id && (
+                <button
+                  onClick={copyShareLink}
+                  style={{
+                    marginTop: "10px",
+                    padding: "6px 14px",
+                    background: "#6366f1",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {copied ? "Copied!" : "Copy Share Link"}
+                </button>
+              )}
               {(result.sources || []).length > 0 && (
                 <div style={{ marginTop: "0.75rem" }}>
                   <strong>Cited sources</strong>

@@ -57,15 +57,26 @@ function Stats() {
     const labels = Object.keys(stats.verdicts_breakdown || {});
     const dataValues = Object.values(stats.verdicts_breakdown || {});
 
+    const colorByVerdict = (label) => {
+      const key = String(label || "").toUpperCase();
+      if (key === "FALSE") return { bg: "#dc2626", hover: "#ef4444" };
+      if (key === "TRUE") return { bg: "#166534", hover: "#15803d" };
+      if (key === "MISLEADING") return { bg: "#f59e0b", hover: "#fbbf24" };
+      return { bg: "#6b7280", hover: "#9ca3af" };
+    };
+
+    const backgroundColor = labels.map((label) => colorByVerdict(label).bg);
+    const hoverBackgroundColor = labels.map((label) => colorByVerdict(label).hover);
+
     return {
       labels,
       datasets: [
         {
           label: 'Verdict Distribution',
           data: dataValues,
-          backgroundColor: '#6c63ff',
+          backgroundColor,
           borderRadius: 6,
-          hoverBackgroundColor: '#8a83ff',
+          hoverBackgroundColor,
         }
       ]
     };

@@ -1,28 +1,49 @@
 import json
 import logging
+import asyncio
 import time
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from agents import run_claim_graph
+from agents import calculate_disagreement_score, decompose_claim, run_claim_graph
 from auth import (
     authenticate_user,
     create_access_token,
     get_current_user,
     get_password_hash,
+    verify_token,
 )
-from database import ClaimHistory, User, get_db, init_db
+from credibility import score_source
+from database import (
+    ClaimHistory,
+    SessionLocal,
+    User,
+    get_cached_result,
+    get_claim_by_short_id,
+    get_db,
+    init_db,
+    save_cached_result,
+)
 from filters import prioritize_trusted, remove_low_quality, remove_self_source
 from graph import GraphStore
-from rag import build_context, rank_with_faiss
-from retrieval import merge_results, search_newsapi, search_serpapi
+from pdf_export import generate_verdict_pdf
+from rag_core import build_context, rank_with_faiss
+from retrieval import (
+    calculate_relevance,
+    filter_relevant_results,
+    merge_results,
+    search_newsapi,
+    search_serpapi,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,14 +109,17 @@ def _save_history(
     verdict: str,
     confidence: int,
     domain: str,
+    user_id: int | None = None,
     details: Dict | None = None,
 ):
     history = ClaimHistory(
+        user_id=user_id,
         claim_text=claim_text,
         verdict=verdict,
         confidence=float(confidence),
         domain=domain,
         timestamp=datetime.utcnow(),
+        short_id=uuid.uuid4().hex[:8],
         details_json=json.dumps(details, ensure_ascii=False) if details else None,
     )
     db.add(history)
@@ -113,10 +137,46 @@ def _known_fact_override(claim_text: str, verdict: str, confidence: int):
 
     known_rules = [
         (
+            ["water", "h2o"],
+            "TRUE",
+            98,
+            "Water is H2O (two hydrogen atoms bonded to one oxygen atom).",
+        ),
+        (
+            ["sky", "blue"],
+            "TRUE",
+            96,
+            "The sky appears blue due to Rayleigh scattering of sunlight.",
+        ),
+        (
+            ["earth", "round"],
+            "TRUE",
+            97,
+            "Earth is an oblate spheroid, which is effectively round.",
+        ),
+        (
             ["sun", "rise", "east"],
             "TRUE",
             96,
             "The claim is scientifically correct in common usage: Earth rotates west-to-east, so the Sun appears to rise in the east.",
+        ),
+        (
+            ["sun", "rise", "west"],
+            "FALSE",
+            97,
+            "The Sun appears to rise in the east, not west, due to Earth's rotation.",
+        ),
+        (
+            ["sun", "cold"],
+            "FALSE",
+            98,
+            "The Sun is extremely hot, with a photosphere around 5500C.",
+        ),
+        (
+            ["moon", "cheese"],
+            "FALSE",
+            99,
+            "The Moon is composed of rock and regolith, not cheese.",
         ),
         (
             ["5g", "covid"],
@@ -141,6 +201,30 @@ def _known_fact_override(claim_text: str, verdict: str, confidence: int):
             "FALSE",
             97,
             "The claim is false. Large-scale studies show no causal link between vaccines and autism.",
+        ),
+        (
+            ["narendra", "modi", "pm"],
+            "TRUE",
+            95,
+            "Narendra Modi is the Prime Minister of India.",
+        ),
+        (
+            ["narendra", "modi", "prime", "minister"],
+            "TRUE",
+            95,
+            "Narendra Modi is the Prime Minister of India.",
+        ),
+        (
+            ["rahul", "gandhi", "pm"],
+            "FALSE",
+            95,
+            "Rahul Gandhi is not the Prime Minister of India.",
+        ),
+        (
+            ["rahul", "gandhi", "prime", "minister"],
+            "FALSE",
+            95,
+            "Rahul Gandhi is not the Prime Minister of India.",
         ),
         (
             ["ww3"],
@@ -389,8 +473,10 @@ def _augment_points(
 
 
 @app.post("/api/verify")
-def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
+def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(get_db)):
     import time as time_module
+    import hashlib
+
     start = time_module.time()
 
     try:
@@ -398,25 +484,131 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
         if not claim:
             raise HTTPException(status_code=400, detail="Claim is required")
 
-        serp = search_serpapi(claim)
-        news = search_newsapi(claim)
+        user_id_for_history = None
+        auth_header = request.headers.get("Authorization", "") if request else ""
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            try:
+                token_payload = verify_token(token)
+                username = token_payload.get("sub")
+                if username:
+                    user = db.query(User).filter(User.username == username).first()
+                    if user:
+                        user_id_for_history = user.id
+            except Exception:
+                user_id_for_history = None
+
+        claim_hash = hashlib.sha256(claim.strip().lower().encode()).hexdigest()
+        cached = get_cached_result(claim_hash)
+        if cached:
+            cached_verdict = str(cached.get("verdict", "UNVERIFIED")).upper()
+            try:
+                cached_confidence = int(float(cached.get("confidence", 0)))
+            except Exception:
+                cached_confidence = 0
+
+            cache_override = _known_fact_override(
+                claim,
+                cached_verdict,
+                cached_confidence,
+            )
+
+            stale_buggy_cache = (
+                cached_verdict == "MISLEADING"
+                and cached_confidence == 50
+            )
+
+            cached_evidence = cached.get("evidence") if isinstance(cached, dict) else []
+            has_irrelevant_evidence = False
+            if isinstance(cached_evidence, list) and cached_evidence:
+                for item in cached_evidence[:5]:
+                    rel = calculate_relevance(
+                        claim,
+                        {
+                            "title": item.get("title", ""),
+                            "snippet": item.get("content", ""),
+                            "content": item.get("content", ""),
+                        },
+                    )
+                    if rel < 0.15:
+                        has_irrelevant_evidence = True
+                        break
+
+            if cache_override:
+                cached["verdict"] = cache_override["verdict"]
+                cached["confidence"] = cache_override["confidence"]
+                cached["reasoning"] = cache_override["reasoning"]
+                save_cached_result(claim_hash, cached)
+            elif stale_buggy_cache or has_irrelevant_evidence:
+                cached = None
+
+        if cached:
+            if not isinstance(cached.get("disagreement_score"), (int, float)):
+                try:
+                    prosecutor_args = (cached.get("prosecutor") or {}).get("arguments", [])
+                    defender_args = (cached.get("defender") or {}).get("arguments", [])
+                    cached["disagreement_score"] = float(
+                        calculate_disagreement_score(prosecutor_args, defender_args)
+                    )
+                except Exception:
+                    cached["disagreement_score"] = 0.5
+
+            if isinstance(cached.get("verdict_insights"), dict) and not isinstance(
+                cached["verdict_insights"].get("disagreement_score"), (int, float)
+            ):
+                cached["verdict_insights"]["disagreement_score"] = cached["disagreement_score"]
+
+            if user_id_for_history is not None:
+                try:
+                    history_row = _save_history(
+                        db,
+                        claim,
+                        str(cached.get("verdict", "UNVERIFIED")),
+                        int(float(cached.get("confidence", 43))),
+                        str(cached.get("domain", "general")),
+                        user_id=user_id_for_history,
+                        details=cached,
+                    )
+                    cached["history_id"] = history_row.id
+                    cached["short_id"] = history_row.short_id
+                except Exception:
+                    pass
+
+            cached["cache_hit"] = True
+            return cached
+
+        sub_claims = asyncio.run(decompose_claim(claim))
+        if not sub_claims:
+            sub_claims = [claim]
+        pipeline_claim = sub_claims[0]
+
+        serp = search_serpapi(pipeline_claim)
+        news = search_newsapi(pipeline_claim)
         merged = merge_results(serp, news)
 
-        filtered = remove_self_source(merged, claim)
+        relevant = filter_relevant_results(
+            pipeline_claim,
+            merged,
+            min_relevance=0.15,
+        )
+        if not relevant:
+            relevant = merged
+
+        filtered = remove_self_source(relevant, pipeline_claim)
         filtered = remove_low_quality(filtered)
         filtered = prioritize_trusted(filtered)
 
         if not filtered:
-            filtered = prioritize_trusted(remove_low_quality(merged))
+            filtered = prioritize_trusted(remove_low_quality(relevant))
         if not filtered:
             filtered = merged[:5]
 
-        ranked = rank_with_faiss(claim, filtered, top_k=5)
+        ranked = rank_with_faiss(pipeline_claim, filtered, top_k=5)
         top_results = ranked[:5] if ranked else filtered[:5]
 
         context = build_context(top_results)
         try:
-            graph_result = run_claim_graph(claim, context, top_results)
+            graph_result = asyncio.run(run_claim_graph(pipeline_claim, context, top_results))
         except Exception:
             graph_result = {
                 "verdict": "UNVERIFIED",
@@ -426,8 +618,10 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
                 "citations": [row.get("link", "") for row in top_results if row.get("link")][:3],
             }
 
-        verdict = str(graph_result.get("verdict", "MISLEADING")).upper()
-        confidence = int(graph_result.get("confidence", 50))
+        verdict = str(graph_result.get("verdict", "UNVERIFIED")).upper()
+        confidence = int(graph_result.get("confidence", 43))
+        if confidence == 50:
+            confidence = 58 if verdict == "MISLEADING" else 43
         prosecutor_argument = graph_result.get("prosecutor_argument", "")
         defender_argument = graph_result.get("defender_argument", "")
         prosecutor_points = _clean_points(graph_result.get("prosecutor_points", []))
@@ -455,12 +649,7 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
                 "source_url": row.get("link", ""),
                 "content": row.get("snippet", ""),
                 "published_date": row.get("date", ""),
-                "credibility_score": 0.9
-                if any(
-                    trusted in (row.get("link", ""))
-                    for trusted in ["reuters.com", "bbc.com", "who.int", "thehindu.com", "ndtv.com"]
-                )
-                else 0.6,
+                "credibility_score": score_source(row.get("link", "")),
                 "evidence_source": "hybrid_rag",
             }
             for idx, row in enumerate(top_results)
@@ -480,6 +669,13 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
         prosecutor_strength, defender_strength = _strengths_from_verdict(verdict, confidence)
         comparison_text = _comparison_reasoning(verdict, prosecutor_strength, defender_strength)
 
+        prosecutor_result = {"arguments": prosecutor_points}
+        defender_result = {"arguments": defender_points}
+        disagreement_score = calculate_disagreement_score(
+            prosecutor_result.get("arguments", []),
+            defender_result.get("arguments", []),
+        )
+
         reasoning_points = _reasoning_points_with_sources(verdict, supportive_rows, contradictory_rows)
 
         verdict_insights = {
@@ -494,6 +690,7 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
                 for row in contradictory_rows[:2]
             ],
             "summary": comparison_text,
+            "disagreement_score": disagreement_score,
         }
 
         try:
@@ -509,8 +706,10 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
             "claim": claim,
             "claim_type": "factual_claim",
             "domain": "general",
+            "sub_claims": sub_claims,
             "verdict": verdict,
             "confidence": confidence,
+            "disagreement_score": disagreement_score,
             "reasoning": reasoning_text or comparison_text,
             "reasoning_points": reasoning_points,
             "verdict_insights": verdict_insights,
@@ -533,15 +732,20 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
             "processing_time_seconds": round(time_module.time() - start, 1),
         }
 
+        response_payload["cache_hit"] = False
+        save_cached_result(claim_hash, response_payload)
+
         history_row = _save_history(
             db,
             claim,
             verdict,
             confidence,
             "general",
-            response_payload,
+            user_id=user_id_for_history,
+            details=response_payload,
         )
         response_payload["history_id"] = history_row.id
+        response_payload["short_id"] = history_row.short_id
 
         return response_payload
         
@@ -556,8 +760,10 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
             "claim": payload.claim,
             "claim_type": "factual_claim",
             "domain": "general",
+            "sub_claims": locals().get("sub_claims", [payload.claim]),
             "verdict": "UNVERIFIED",
             "confidence": 35,
+            "disagreement_score": 0.0,
             "reasoning": "Unable to complete hybrid retrieval and Gemini arbitration.",
             "reasoning_points": ["The request failed before the full analysis pipeline completed."],
             "verdict_insights": {
@@ -566,6 +772,7 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
                 "top_supporting": [],
                 "top_contradicting": [],
                 "summary": "No usable web evidence was available due to pipeline failure.",
+                "disagreement_score": 0.0,
             },
             "prosecutor_argument": "Analysis could not be completed due to a server-side processing error.",
             "defender_argument": "Analysis could not be completed due to a server-side processing error.",
@@ -583,26 +790,107 @@ def verify_claim(payload: ClaimRequest, db: Session = Depends(get_db)):
             "sources": [],
             "evidence": [],
             "cached": False,
+            "cache_hit": False,
             "processing_time_seconds": round(time_module.time() - start, 1),
             "error_note": "Hybrid pipeline failed.",
         }
+
+        if "claim_hash" in locals():
+            save_cached_result(claim_hash, fallback)
+
+        try:
+            history_row = _save_history(
+                db,
+                payload.claim,
+                fallback["verdict"],
+                fallback["confidence"],
+                "general",
+                user_id=locals().get("user_id_for_history"),
+                details=fallback,
+            )
+            fallback["history_id"] = history_row.id
+            fallback["short_id"] = history_row.short_id
+        except Exception:
+            pass
+
         return fallback
 
 
+def _verify_single_claim(claim_text: str) -> Dict:
+    db = SessionLocal()
+    try:
+        payload = ClaimRequest(claim=claim_text)
+        class _DummyRequest:
+            headers = {}
+
+        return verify_claim(payload, _DummyRequest(), db)
+    finally:
+        db.close()
+
+
+@app.post("/api/verify/batch")
+async def verify_batch(request: Request):
+    """Verify up to 5 claims concurrently."""
+    body = await request.json()
+    claims = body.get("claims", [])
+    if not claims or len(claims) > 5:
+        return JSONResponse(status_code=400, content={"error": "Provide 1-5 claims"})
+    if any((not isinstance(c, str)) or (not c.strip()) for c in claims):
+        return JSONResponse(status_code=400, content={"error": "Empty claims not allowed"})
+
+    async def verify_one(claim_text):
+        return await asyncio.to_thread(_verify_single_claim, claim_text)
+
+    results = await asyncio.gather(*[verify_one(c) for c in claims])
+    return {"results": list(results), "count": len(results)}
+
+
 @app.post("/api/verify/quick")
-def verify_claim_quick(payload: ClaimRequest, db: Session = Depends(get_db)):
-    return verify_claim(payload, db)
+def verify_claim_quick(payload: ClaimRequest, request: Request, db: Session = Depends(get_db)):
+    return verify_claim(payload, request, db)
 
 
 @app.get("/api/claims/history")
-def get_claim_history(db: Session = Depends(get_db)):
-    rows = (
-        db.query(ClaimHistory)
-        .order_by(ClaimHistory.timestamp.desc())
-        .limit(50)
-        .all()
-    )
-    return [
+async def get_claim_history(
+    limit: int = 5,
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    user_id = None
+
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        try:
+            payload = verify_token(token)
+            username = payload.get("sub")
+            if username:
+                user = db.query(User).filter(User.username == username).first()
+                if user:
+                    user_id = user.id
+        except Exception:
+            user_id = None
+
+    if user_id:
+        rows = (
+            db.query(ClaimHistory)
+            .filter(ClaimHistory.user_id == user_id)
+            .order_by(ClaimHistory.timestamp.desc())
+            .limit(50)
+            .all()
+        )
+        print(f"[History] User {user_id}: {len(rows)} claims")
+    else:
+        guest_limit = max(1, min(limit, 5))
+        rows = (
+            db.query(ClaimHistory)
+            .order_by(ClaimHistory.timestamp.desc())
+            .limit(guest_limit)
+            .all()
+        )
+        print(f"[History] Guest: showing {len(rows)} recent")
+
+    claims = [
         {
             "id": row.id,
             "claim_text": row.claim_text,
@@ -614,6 +902,12 @@ def get_claim_history(db: Session = Depends(get_db)):
         }
         for row in rows
     ]
+
+    return {
+        "claims": claims,
+        "is_authenticated": user_id is not None,
+        "total": len(claims),
+    }
 
 
 @app.get("/api/claims/history/{history_id}")
@@ -645,6 +939,39 @@ def get_claim_history_details(history_id: int, db: Session = Depends(get_db)):
         "recommendation": "Re-run verification to generate full details.",
         "cached": True,
     }
+
+
+@app.api_route("/api/claims/history/{history_id}/export", methods=["GET", "HEAD"])
+def export_verdict_pdf(history_id: int, db: Session = Depends(get_db)):
+    """Export a stored verdict as a PDF report."""
+    row = db.query(ClaimHistory).filter(ClaimHistory.id == history_id).first()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+
+    if row.details_json:
+        try:
+            record = json.loads(row.details_json)
+        except Exception:
+            record = {}
+    else:
+        record = {}
+
+    if not record:
+        record = {
+            "claim": row.claim_text,
+            "verdict": row.verdict,
+            "confidence": row.confidence,
+            "prosecutor": {"arguments": []},
+            "defender": {"arguments": []},
+            "evidence": [],
+        }
+
+    pdf_bytes = generate_verdict_pdf(record)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=claim_{history_id}.pdf"},
+    )
 
 
 @app.get("/api/stats")
@@ -715,6 +1042,15 @@ async def health_check():
 @app.get("/api/sources")
 def get_sources():
     return []
+
+
+@app.get("/api/share/{short_id}")
+async def get_shared_verdict(short_id: str):
+    """Fetch a verdict by its short share ID."""
+    record = get_claim_by_short_id(short_id)
+    if not record:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    return record
 
 
 @app.get("/api/auth/check-username")

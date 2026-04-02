@@ -23,9 +23,38 @@ export const verifyClaim = async (claim) => {
   return data;
 };
 
-export const getHistory = async () => {
-  const { data } = await api.get("/api/claims/history");
-  return data;
+export const getHistoryResponse = async (token) => {
+  const resolvedToken =
+    token ||
+    localStorage.getItem("veritas-token") ||
+    sessionStorage.getItem("veritas-token") ||
+    null;
+
+  const headers = {};
+  if (resolvedToken) {
+    headers.Authorization = `Bearer ${resolvedToken}`;
+  }
+
+  const { data } = await api.get("/api/claims/history", { headers });
+
+  if (Array.isArray(data)) {
+    return {
+      claims: data,
+      is_authenticated: Boolean(resolvedToken),
+      total: data.length,
+    };
+  }
+
+  return {
+    claims: data?.claims || [],
+    is_authenticated: Boolean(data?.is_authenticated),
+    total: Number(data?.total || 0),
+  };
+};
+
+export const getHistory = async (token) => {
+  const data = await getHistoryResponse(token);
+  return data.claims || [];
 };
 
 export const getHistoryDetails = async (historyId) => {

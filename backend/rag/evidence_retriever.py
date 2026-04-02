@@ -37,6 +37,16 @@ RSS_STOPWORDS = {
     "his", "her", "can"
 }
 
+CLAIM_STOP_WORDS = {
+    "is", "are", "was", "were", "the", "a", "an",
+    "in", "of", "to", "and", "or", "that", "this",
+    "it", "for", "on", "with", "at", "by", "from",
+    "will", "would", "could", "should", "be", "been",
+    "have", "has", "do", "does", "did", "not", "no",
+    "as", "but", "if", "year", "2026", "2025", "2024",
+    "india", "latest", "news", "today", "new"
+}
+
 
 def _rss_terms(keywords: list) -> list:
     terms = []
@@ -47,6 +57,60 @@ def _rss_terms(keywords: list) -> list:
         if value not in terms:
             terms.append(value)
     return terms
+
+
+def build_search_query(claim: str, keywords: list) -> str:
+    """Build a claim-focused search query using meaningful claim terms."""
+    stop = {
+        "is", "are", "was", "the", "a", "an", "in", "of",
+        "to", "and", "or", "will", "can", "does", "do"
+    }
+    important = [
+        w.strip(".,!?\"'").lower()
+        for w in (claim or "").split()
+        if w and len(w.strip(".,!?\"'")) > 2 and w.lower() not in stop
+    ]
+    if important:
+        return " ".join(important[:5])
+    return " ".join((keywords or [])[:5]).strip() or (claim or "").strip()
+
+
+def calculate_relevance(claim: str, article: dict) -> float:
+    """
+    Calculate how relevant an article is to a claim.
+    Returns score in range [0.0, 1.0].
+    """
+    claim_words = {
+        w.lower().strip(".,!?\"'")
+        for w in (claim or "").split()
+        if len(w.strip(".,!?\"'")) > 2 and w.lower() not in CLAIM_STOP_WORDS
+    }
+
+    if not claim_words:
+        return 0.5
+
+    title = (article.get("title", "") or "").lower()
+    content = (article.get("content", "") or "").lower()
+    full = f"{title} {title} {content}"
+
+    matched_words = [w for w in claim_words if w in full]
+    matches = len(matched_words)
+    score = matches / max(len(claim_words), 1)
+
+    ordered = [
+        w.lower().strip(".,!?\"'")
+        for w in (claim or "").split()
+        if len(w.strip(".,!?\"'")) > 2 and w.lower() not in CLAIM_STOP_WORDS
+    ]
+    phrases = [f"{ordered[i]} {ordered[i + 1]}" for i in range(len(ordered) - 1)]
+    phrase_hits = sum(1 for p in phrases if p in full)
+    if phrase_hits:
+        score += min(0.4, phrase_hits * 0.2)
+
+    if len(claim_words) >= 3 and matches == 1:
+        score *= 0.4
+
+    return round(max(0.0, min(1.0, score)), 3)
 
 def search_rss(keywords: list, claim: str = "") -> list:
     articles = []
@@ -136,14 +200,11 @@ def _build_search_query(claim: str, keywords: list, domain: str) -> str:
 
     if "blood" in lower_claim and "group" in lower_claim:
         return (
-            f'{claim_text} ABO Rh blood transfusion '
-            f'donor recipient compatibility chart'
-        )
+            f"{build_search_query(claim_text, keywords)} "
+            "abo rh blood transfusion donor recipient compatibility chart"
+        ).strip()
 
-    keyword_tail = " ".join((keywords or [])[:4]).strip()
-    if keyword_tail:
-        return f"{claim_text} {keyword_tail}".strip()
-    return claim_text
+    return build_search_query(claim_text, keywords)
 
 def retrieve(
     claim: str,
@@ -190,18 +251,40 @@ def retrieve(
         elif not url:
             unique.append(a)
 
-    ranked = sorted(
-        unique,
-        key=lambda x: x.get("combined_score", 0),
-        reverse=True
-    )[:5]
+    print(f"\n[Evidence] Filtering {len(unique)} articles for relevance to: '{claim}'")
 
-    print(f"\n[Evidence] FINAL TOP {len(ranked)} SOURCES:")
-    for i, a in enumerate(ranked, 1):
-        print(f"  {i}. [{a['source']}] "
-              f"{a['title'][:55]}")
-        print(f"     cred={a['credibility_score']:.2f} | "
-              f"score={a['combined_score']:.2f} | "
-              f"via={a['evidence_source']}")
+    relevant = []
+    for article in unique:
+        rel_score = calculate_relevance(claim, article)
+        article["relevance_score"] = rel_score
 
-    return ranked
+        if rel_score >= 0.15 or article.get("evidence_source") == "knowledge_base":
+            relevant.append(article)
+            print(f"  [OK] Relevant ({rel_score:.2f}): {article.get('title', '')[:50]}")
+        else:
+            print(f"  [SKIP] Filtered ({rel_score:.2f}): {article.get('title', '')[:50]}")
+
+    print(f"[Evidence] Kept {len(relevant)} relevant articles")
+
+    if not relevant:
+        print("[Evidence] No relevant articles found. Using knowledge base only.")
+        return [a for a in unique if a.get("evidence_source") == "knowledge_base"]
+
+    for article in relevant:
+        cred = article.get("credibility_score", 0.5)
+        rel = article.get("relevance_score", 0.5)
+        realtime_bonus = 0.1 if article.get("is_realtime") else 0.0
+        article["combined_score"] = (cred * 0.4) + (rel * 0.5) + realtime_bonus
+
+    ranked = sorted(relevant, key=lambda x: x.get("combined_score", 0), reverse=True)
+    top5 = ranked[:5]
+
+    print(f"\n[Evidence] Final top {len(top5)}:")
+    for i, article in enumerate(top5, 1):
+        print(
+            f"  {i}. [rel={article.get('relevance_score', 0):.2f}] "
+            f"[cred={article.get('credibility_score', 0):.2f}] "
+            f"{article.get('title', '')[:55]}"
+        )
+
+    return top5
