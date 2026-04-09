@@ -1,11 +1,11 @@
 <div align="center">
 
-# VeritasAI
+# VeritasAI 🔎🧠⚖️
 
 ### Fake News ❌ -> Facts ✅
 
 <p>
-  <img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=22&duration=2400&pause=650&color=22C55E&center=true&vCenter=true&width=920&lines=Explainable+Fake+News+Verification+Platform;RAG+%2B+Evidence+Ranking+%2B+Multi-Agent+Debate;Verdicts+with+Sources%2C+Confidence%2C+and+History+Analytics" alt="typing banner" />
+  <img src="https://readme-typing-svg.demolab.com?font=Orbitron&weight=700&size=22&duration=2500&pause=700&color=22C55E&center=true&vCenter=true&width=960&lines=Explainable+Claim+Verification+Platform;RAG+%2B+FAISS+%2B+Multi-Agent+Reasoning;Verdict+%2B+Confidence+%2B+Evidence+%2B+History+%2B+PDF" alt="VeritasAI typing banner" />
 </p>
 
 <p>
@@ -14,229 +14,177 @@
   <img src="https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" />
   <img src="https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite&logoColor=white" />
   <img src="https://img.shields.io/badge/FAISS-Vector%20Ranking-7C3AED?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Neo4j-Optional-008CC1?style=for-the-badge&logo=neo4j&logoColor=white" />
+  <img src="https://img.shields.io/badge/SQLite-Local%20Storage-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Status-Operational-22C55E?style=flat-square" />
-  <img src="https://img.shields.io/badge/Reasoning-Source--Backed-0EA5E9?style=flat-square" />
-  <img src="https://img.shields.io/badge/UI-Animated-F97316?style=flat-square" />
-  <img src="https://img.shields.io/badge/Verdict%20Insights-Enabled-A855F7?style=flat-square" />
-  <img src="https://img.shields.io/badge/Agent%20Cards-Balanced-14B8A6?style=flat-square" />
-</p>
-
-<p>
-  <img src="https://img.shields.io/badge/Stack-RAG%20%2B%20Agents%20%2B%20Graphs-111827?style=plastic" />
-  <img src="https://img.shields.io/badge/MCA-Major%20Project-7C3AED?style=plastic" />
-  <img src="https://img.shields.io/badge/Explainability-First-F59E0B?style=plastic" />
-  <img src="https://img.shields.io/badge/Misinformation-Detection-E11D48?style=plastic" />
+  <img src="https://img.shields.io/badge/Status-Active-22C55E?style=flat-square" />
+  <img src="https://img.shields.io/badge/Reasoning-Agentic-0EA5E9?style=flat-square" />
+  <img src="https://img.shields.io/badge/Auth-JWT-F97316?style=flat-square" />
+  <img src="https://img.shields.io/badge/PDF%20Export-Enabled-A855F7?style=flat-square" />
+  <img src="https://img.shields.io/badge/Share%20Links-short__id-16A34A?style=flat-square" />
+  <img src="https://img.shields.io/badge/Health%20Check-Live-14B8A6?style=flat-square" />
 </p>
 
 </div>
 
 ---
 
-## Overview 🧠
+## What Is VeritasAI? 📰➡️📊
 
-VeritasAI is a full-stack misinformation verification system that combines retrieval, filtering, ranking, and multi-agent reasoning.
-Instead of producing a black-box label, it returns:
+VeritasAI is a full-stack misinformation verification platform that analyzes a claim using:
 
-- verdict (`TRUE` / `FALSE` / `MISLEADING` / `UNVERIFIED`)
-- confidence score
-- prosecutor and defender arguments
-- source-backed reasoning points
-- evidence cards with links
-- history snapshots and statistics
+- Hybrid retrieval (SerpAPI + NewsAPI)
+- Relevance filtering + domain quality filtering
+- FAISS ranking for evidence prioritization
+- Multi-agent argument generation (Prosecutor ⚔️ / Defender 🛡️ / Judge 👩‍⚖️)
+- Confidence + disagreement scoring
+- History persistence, shareable results, and PDF export
 
-### Why this matters
-
-| Problem | Typical tools | VeritasAI approach |
-|---|---|---|
-| Opaque verdicts | Label only | Label + explicit rationale + source URLs |
-| Weak source tracking | Minimal links | Ranked evidence + verdict insights block |
-| Unbalanced argument view | One-side summary | Prosecutor vs Defender with balanced points |
-| Reproducibility | Hard to replay | History snapshots + claim replay |
+It is designed to be explainable, not just predictive.
 
 ---
 
-## Feature Matrix ✨
+## Current Highlights (April 2026) ✨
 
-| Module | Feature | Status | Notes |
-|---|---|---|---|
-| Retrieval | SerpAPI + NewsAPI fetch | ✅ | Increased breadth before ranking |
-| Filtering | self-source + quality filtering | ✅ | Removes noisy/irrelevant evidence |
-| Ranking | FAISS semantic shortlist | ✅ | Top context passed to agents |
-| Agents | Prosecutor / Defender / Judge | ✅ | Source-backed output formatting |
-| Reasoning | Explicit evidence citations | ✅ | Prosecutor + defender + final decision line |
-| Verdict Insights | Support vs contradict counts | ✅ | Includes top supporting/contradicting sources |
-| Frontend UX | Animated pipeline + cards | ✅ | Symmetric hover glow, stronger card styling |
-| Persistence | SQLite claim history | ✅ | Replay historical results on Home |
-| Graph Storage | Neo4j integration | Optional | App runs without Neo4j |
+- ✅ End-to-end claim verification API with resilient fallback behavior
+- ✅ Batch verification endpoint (`/api/verify/batch`)
+- ✅ Source-backed reasoning with per-side evidence cards
+- ✅ Disagreement score (`0.0` to `1.0`) included in verify response
+- ✅ JWT auth flows (register/login/me)
+- ✅ History snapshots + share links via `short_id`
+- ✅ PDF export endpoint supports both `GET` and `HEAD`
+- ✅ Frontend includes replay, confidence gauge, reasoning, and evidence visualization
 
 ---
 
-## New Enhancements (Recent) 🚀
-
-### Backend improvements
-
-- Added source-backed reasoning point generation
-- Added verdict insights payload with source counts and top links
-- Balanced prosecutor/defender argument lengths to avoid empty card sections
-- Increased retrieval breadth to improve evidence diversity
-
-### Frontend improvements
-
-- Richer MISLEADING verdict block with supportive/contradictory insight chips
-- Better card consistency and visual hierarchy
-- Smooth hover effects from both sides instead of one-sided lift
-
-### Documentation improvements
-
-- Expanded architecture and flow diagrams
-- Added runtime file cleanup guidance
-- Added endpoint, environment, and troubleshooting tables
-
----
-
-## Architecture (Color-Coded) 🎨
-
-```mermaid
-flowchart LR
-    U[User Claim]:::input --> A[Retrieval Layer]:::retrieval
-    A --> B[Filter + Dedupe]:::filter
-    B --> C[FAISS Ranking]:::rank
-    C --> D[Evidence Context]:::context
-    D --> P[Prosecutor Agent]:::prosecutor
-    D --> F[Defender Agent]:::defender
-    P --> J[Judge Agent]:::judge
-    F --> J
-    J --> V[Verdict + Confidence]:::verdict
-    V --> R[Reasoning Points + Insights]:::insights
-    R --> DB[(SQLite History)]:::storage
-    R --> UI[Frontend Cards]:::ui
-
-    classDef input fill:#0f172a,stroke:#22d3ee,stroke-width:2,color:#e2e8f0;
-    classDef retrieval fill:#1d4ed8,stroke:#93c5fd,color:#fff;
-    classDef filter fill:#0f766e,stroke:#5eead4,color:#fff;
-    classDef rank fill:#6d28d9,stroke:#c4b5fd,color:#fff;
-    classDef context fill:#334155,stroke:#94a3b8,color:#fff;
-    classDef prosecutor fill:#b91c1c,stroke:#fca5a5,color:#fff;
-    classDef defender fill:#065f46,stroke:#86efac,color:#fff;
-    classDef judge fill:#92400e,stroke:#fcd34d,color:#fff;
-    classDef verdict fill:#9a3412,stroke:#fdba74,color:#fff;
-    classDef insights fill:#7e22ce,stroke:#d8b4fe,color:#fff;
-    classDef storage fill:#1e293b,stroke:#94a3b8,color:#fff;
-    classDef ui fill:#0c4a6e,stroke:#67e8f9,color:#fff;
-```
-
----
-
-## Full Request Journey 🔁
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant API as FastAPI
-    participant SR as Search APIs
-    participant RK as Ranker
-    participant AG as Agents
-    participant DB as SQLite
-
-    U->>FE: Enter claim + Verify
-    FE->>API: POST /api/verify
-    API->>SR: Search web/news evidence
-    SR-->>API: Raw evidence candidates
-    API->>API: Filter, dedupe, quality control
-    API->>RK: FAISS ranking
-    RK-->>API: Top evidence context
-    API->>AG: Prosecutor + Defender + Judge
-    AG-->>API: Arguments + verdict + confidence
-    API->>API: Build reasoning_points + verdict_insights
-    API->>DB: Save details_json history snapshot
-    API-->>FE: Structured payload
-    FE-->>U: Pipeline + verdict card + agents + evidence
-```
-
----
-
-## Verdict Logic View ⚖️
+## Architecture Overview 🏗️
 
 ```mermaid
 flowchart TD
-    A[Top Ranked Evidence] --> B{Support vs Contradict Split}
-    B -->|Contradict| C[Prosecutor Points]
-    B -->|Support| D[Defender Points]
-    C --> E[Augment to minimum bullets]
-    D --> E
-    E --> F[Reasoning Points with source URLs]
-    E --> G[Verdict Insights block]
-    F --> H[Final API Response]
-    G --> H
+    U[User enters claim 🧑‍💻] --> FE[React UI 🎨]
+    FE --> API[FastAPI /api/verify]
+    API --> CACHE{SQLite cache hit? 🗃️}
+    CACHE -- Yes --> RES[Return cached verdict ⚡]
+    CACHE -- No --> RET[Retrieve: SerpAPI + NewsAPI 🌐]
+    RET --> FIL[Filter relevance + quality 🧹]
+    FIL --> RANK[FAISS ranking 🧮]
+    RANK --> CTX[Build context 📚]
+    CTX --> P[Prosecutor agent ⚔️]
+    CTX --> D[Defender agent 🛡️]
+    P --> J[Judge agent 👩‍⚖️]
+    D --> J
+    J --> SCORE[Confidence + disagreement 📈]
+    SCORE --> SAVE[Save cache + history + share ID 💾]
+    SAVE --> RES
+    RES --> FE
 ```
 
 ---
 
-## UI Panels and Purpose 🖥️
+## Runtime Sequence (How a Verify Request Works) 🧭
 
-| UI Section | Purpose | Key Data |
-|---|---|---|
-| Pipeline Execution | Show live verification stages | active step, progress %, status text |
-| Verdict Card | Explain final decision quickly | verdict, confidence, support/contradict counts |
-| Reasoning Card | Show why verdict was chosen | source-backed reasoning points |
-| Prosecutor Card | Evidence against claim | arguments, strongest point, related sources |
-| Defender Card | Evidence supporting claim | arguments, strongest point, related sources |
-| Evidence Grid | Raw retriever outputs | title, source, snippet, link, credibility |
-| History Page | Replay and audit past claims | saved payload + timestamps |
+```mermaid
+sequenceDiagram
+    participant UI as Frontend
+    participant API as FastAPI
+    participant DB as SQLite
+    participant RET as Retrieval Layer
+    participant AG as Agent Layer
+
+    UI->>API: POST /api/verify { claim }
+    API->>DB: Check claim_hash cache
+    alt cache hit and valid
+        DB-->>API: cached result
+        API-->>UI: response (cache_hit=true)
+    else cache miss/stale
+        API->>RET: search_serpapi + search_newsapi
+        RET-->>API: merged evidence
+        API->>API: filter + prioritize + FAISS rank
+        API->>AG: prosecutor + defender + judge pipeline
+        AG-->>API: verdict + confidence + arguments
+        API->>DB: save cache + save history snapshot
+        API-->>UI: response (history_id + short_id)
+    end
+```
 
 ---
 
-## Project Structure 📁
+## Tech Stack Map 🧰
+
+| Technology | Where | Why |
+|---|---|---|
+| FastAPI | `backend/main.py` | REST API, orchestration, middleware, startup/shutdown hooks |
+| SQLAlchemy + SQLite | `backend/database.py` | Users, history, cache persistence |
+| JWT + bcrypt | `backend/auth.py` | Secure auth and password hashing |
+| SerpAPI + NewsAPI | `backend/retrieval.py` | Multi-source web/news evidence retrieval |
+| FAISS | `backend/rag_core.py` | Semantic ranking of candidate evidence |
+| Gemini/Grok/Ollama fallback chain | `backend/llm_client.py`, `backend/gemini_client.py` | Robust LLM reasoning fallback strategy |
+| Multi-agent orchestration | `backend/agents.py` | Prosecutor/Defender/Judge debate pipeline |
+| ReportLab | `backend/pdf_export.py` | Export claim verdict reports as PDF |
+| React + Vite | `frontend/react-app/src` | Interactive verification UI |
+| Axios | `frontend/react-app/src/services/api.js` | API client integration |
+| Framer Motion + AOS + Chart.js | frontend pages/components | UX animation + analytics visuals |
+
+---
+
+## Folder Walkthrough 🗂️
 
 ```text
 fake-news-ai/
-├── backend/
-│   ├── main.py
-│   ├── retrieval.py
-│   ├── filters.py
-│   ├── rag.py
-│   ├── agents.py
-│   ├── graph.py
-│   ├── database.py
-│   ├── llm_client.py
-│   ├── requirements.txt
-│   ├── data/
-│   └── rag/
-│       ├── vector_store.py
-│       ├── embeddings.py
-│       ├── evidence_retriever.py
-│       ├── realtime_fetcher.py
-│       └── search_client.py
-└── frontend/react-app/
-    ├── src/
-    │   ├── pages/
-    │   ├── components/
-    │   ├── services/
-    │   └── assets/
-    ├── package.json
-    └── vite.config.js
+  backend/
+    main.py                  # Core API routes and verification orchestration
+    agents.py                # Debate helpers + disagreement scoring
+    rag_core.py              # FAISS ranking + context builder
+    retrieval.py             # SerpAPI/NewsAPI query + relevance logic
+    filters.py               # Source quality and self-source filtering
+    database.py              # ORM models + migrations + cache IO
+    auth.py                  # JWT auth and user verification
+    llm_client.py            # LLM fallback chain (Gemini -> Grok -> Ollama)
+    pdf_export.py            # PDF generation
+    rag/                     # Extra RAG modules and utilities
+    graph/                   # Neo4j client
+
+  frontend/react-app/
+    src/pages/Home.jsx       # Main verification workflow UI
+    src/pages/History.jsx    # History list/detail replay
+    src/pages/Stats.jsx      # Analytics dashboard
+    src/pages/Login.jsx      # Login screen
+    src/pages/Register.jsx   # Register screen
+    src/pages/Profile.jsx    # Profile screen
+    src/components/          # UI building blocks (gauge, cards, badges)
+    src/services/api.js      # Backend API bindings
 ```
 
 ---
 
-## Quick Start 🚀
+## Setup & Run 🚀
 
-### Backend setup
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- npm 9+
+- Optional: Ollama runtime (`ollama serve`) for local LLM fallback
+- Optional: Neo4j server for graph persistence
+
+### 1) Backend
 
 ```bash
 cd fake-news-ai/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Frontend setup
+Health check:
+
+```bash
+curl -s http://localhost:8000/api/health
+```
+
+### 2) Frontend
 
 ```bash
 cd fake-news-ai/frontend/react-app
@@ -244,30 +192,32 @@ npm install --legacy-peer-deps
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-### Access URLs
+Open:
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API docs | http://localhost:8000/docs |
-| Backend health | http://localhost:8000/api/health |
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
 
 ---
 
-## Configuration 🔐
+## Environment Variables 🔐
 
-Create `backend/.env` with:
+Create `backend/.env`:
 
 ```env
-# LLM
-GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-2.5-flash
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2:1b
+# Security
+SECRET_KEY=change_this_for_production
 
-# Search providers
-NEWSAPI_KEY=your_key
-SERPAPI_KEY=your_key
+# LLMs
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-flash
+GROK_API_KEY=
+GROK_MODEL=grok-beta
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:3b
+
+# Search APIs
+SERPAPI_KEY=
+NEWSAPI_KEY=
 
 # Storage
 DATABASE_URL=sqlite:///./veritas.db
@@ -280,68 +230,207 @@ NEO4J_PASSWORD=password
 
 ---
 
-## API Surface 🧩
+## API Documentation 📡
 
-| Method | Endpoint | Description |
+### Verification Endpoints
+
+| Method | Endpoint | Purpose |
 |---|---|---|
-| POST | /api/verify | Full verification pipeline |
-| POST | /api/verify/quick | Quick alias for verify |
-| GET | /api/claims/history | Recent claims list |
-| GET | /api/claims/history/{history_id} | Detailed stored payload |
-| GET | /api/stats | Dashboard metrics |
-| POST | /api/auth/register/ | User registration |
-| POST | /api/auth/login/ | User login |
-| GET | /api/auth/me/ | Current user profile |
+| POST | `/api/verify` | Verify one claim with full pipeline |
+| POST | `/api/verify/batch` | Verify up to 5 claims concurrently |
+| POST | `/api/verify/quick` | Shortcut wrapper around verify |
 
----
+### History, Share, Export
 
-## Runtime Files and Cleanup 🗃️
-
-Expected files generated in `backend/`:
-
-- `veritas.db`
-- `veritas_debug.log`
-- `server.log` (only if redirected)
-
-If these appear at workspace root, they are old run artifacts and can be removed safely after confirming you do not need historical data.
-
----
-
-## Troubleshooting 🛠️
-
-| Issue | Likely Cause | Fix |
+| Method | Endpoint | Purpose |
 |---|---|---|
-| UNVERIFIED fallback too often | Missing API keys or search fetch failure | Verify `.env`, check backend logs |
-| Sparse card output | Skewed source split | Ensure latest backend is running (balanced points patch) |
-| Frontend stale after changes | Browser cache/dev server state | Hard refresh and restart Vite |
-| Neo4j connection warnings | Neo4j not running | Ignore (optional) or start Neo4j service |
-| Huge pip downloads | torch/sentence-transformers dependencies | Allow first install to complete; consider CPU-only tuning |
+| GET | `/api/claims/history` | Return claims list (`claims`, `is_authenticated`, `total`) |
+| GET | `/api/claims/history/{history_id}` | Detailed history snapshot |
+| GET | `/api/claims/history/{history_id}/export` | Download PDF report |
+| HEAD | `/api/claims/history/{history_id}/export` | Metadata/content-type check for PDF |
+| GET | `/api/share/{short_id}` | Public/shared view by short id |
+
+### Auth and Utility
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/auth/check-username` | Username availability check |
+| GET | `/api/auth/check-email` | Email availability check |
+| POST | `/api/auth/register` and `/api/auth/register/` | Register user |
+| POST | `/api/auth/login` and `/api/auth/login/` | Login by username/email |
+| GET | `/api/auth/me` and `/api/auth/me/` | Current authenticated user |
+| GET | `/api/stats` | Aggregate verification stats |
+| GET | `/api/trending` | Trending claims |
+| GET | `/api/health` | Service + LLM connection status |
+| GET | `/api/sources` | Placeholder endpoint |
 
 ---
 
-## Roadmap 📌
+## Verify Response Shape (Important) 📦
 
-- Trust-weighted source scoring by domain and publisher authority
-- Contradiction clustering for duplicate narratives
-- Claim-type aware judging templates
-- Exportable verification reports (PDF/JSON)
-- Better multilingual retrieval and reasoning coverage
+Typical `/api/verify` response includes:
+
+- `verdict`: `TRUE | FALSE | MISLEADING | UNVERIFIED`
+- `confidence`: normalized integer score
+- `disagreement_score`: float in range `0.0..1.0`
+- `reasoning`, `reasoning_points`
+- `prosecutor` and `defender` arguments/strength
+- `prosecutor_evidence`, `defender_evidence`, `evidence`, `sources`
+- `history_id`, `short_id`, `processing_time_seconds`, `cache_hit`
+
+---
+
+## Frontend Experience Map 🎛️
+
+- Home page:
+  - Submit claim
+  - Pipeline progress states and animated execution stages
+  - Verdict badge + confidence gauge + contentiousness label
+  - Prosecutor/Defender cards + evidence cards
+  - Copy share link button using `short_id`
+- History page:
+  - Fetch prior claims
+  - Drill into detailed snapshots
+  - Replay claim analysis
+- Stats page:
+  - Dashboard metrics and chart visualizations
+
+---
+
+## Data Model Snapshot 🗃️
+
+```mermaid
+erDiagram
+    USER ||--o{ CLAIM_HISTORY : has
+
+    USER {
+      int id PK
+      string username
+      string email
+      string hashed_password
+      datetime created_at
+      bool is_active
+    }
+
+    CLAIM_HISTORY {
+      int id PK
+      int user_id FK
+      text claim_text
+      string verdict
+      float confidence
+      string domain
+      datetime timestamp
+      string short_id
+      bool bookmarked
+      text details_json
+    }
+
+    CLAIM_CACHE {
+      string claim_hash PK
+      text result_json
+      datetime created_at
+    }
+```
+
+Note: A compatibility `claims` table shape is also maintained in migrations for older checks.
+
+---
+
+## Reliability & Fallback Strategy 🛟
+
+LLM fallback chain:
+
+1. Gemini
+2. Grok
+3. Ollama
+4. Emergency deterministic fallback object
+
+This keeps the API resilient even when cloud quota/network issues occur.
+
+---
+
+## Known Limitations ⚠️
+
+- LLM quality and external source quality still dominate final verdict quality.
+- News freshness can lag for breaking events.
+- Heuristic stance partitioning can occasionally misclassify nuanced evidence.
+- Frontend local cache and backend cache are separate layers and can diverge temporarily.
+- CORS is currently permissive (`*`) and should be restricted in production.
+
+---
+
+## Troubleshooting 🧯
+
+### 1) npm install fails due to peer dependency resolution
+
+```bash
+npm install --legacy-peer-deps
+```
+
+### 2) Import conflict around `rag`
+
+Project now uses `backend/rag_core.py` (not `backend/rag.py`) to avoid package-shadow conflict with `backend/rag/`.
+
+### 3) Health status is degraded
+
+`/api/health` may show degraded when LLM providers are unreachable or quota-limited. API still serves requests via fallback logic.
+
+### 4) Quick syntax validation
+
+```bash
+cd fake-news-ai
+python3 -c "import ast, sys
+files = [
+  'backend/main.py', 'backend/agents.py', 'backend/database.py',
+  'backend/credibility.py', 'backend/pdf_export.py'
+]
+ok = True
+for f in files:
+    try:
+        with open(f) as fh:
+            ast.parse(fh.read())
+        print('SYNTAX OK:', f)
+    except SyntaxError as e:
+        print('SYNTAX ERROR:', f, e)
+        ok = False
+if not ok:
+    sys.exit(1)
+print('All syntax checks passed.')"
+```
+
+---
+
+## Stickers Zone 🎉
+
+- 🕵️ Fact Detective Mode
+- 🧪 Evidence Lab Mode
+- ⚖️ Debate Courtroom Mode
+- 🧠 Explainability First
+- 📦 Export Ready
+- 🚦 API Health Aware
+- 🧰 Developer Friendly
 
 ---
 
 ## Contribution Guide 🤝
 
-1. Fork and create a feature branch
-2. Keep PRs focused and atomic
-3. Include sample claims and expected outputs for behavior changes
-4. Verify backend endpoint behavior and frontend rendering before PR
+1. Create a feature branch.
+2. Make focused changes.
+3. Run syntax checks and smoke-test `/api/verify`.
+4. Open a PR with before/after notes and screenshots (for UI changes).
+
+---
+
+## License 📄
+
+No explicit license file is currently included. Add a `LICENSE` file before public distribution.
 
 ---
 
 <div align="center">
 
-### Built for explainable misinformation analysis ⚡
+### Built with curiosity, caution, and explainability 💚
 
-If this project helps your work, drop a ⭐ and share feedback.
+If this project helps you, give it a ⭐ and share feedback.
 
 </div>
