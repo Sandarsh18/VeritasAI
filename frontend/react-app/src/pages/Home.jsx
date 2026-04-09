@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import AgentCard from "../components/AgentCard";
 import ConfidenceGauge from "../components/ConfidenceGauge";
 import EvidenceCard from "../components/EvidenceCard";
 import VerdictBadge from "../components/VerdictBadge";
+import { useVoiceInput, useVoiceOutput } from "../hooks/useVoice";
 import { getHistory, getHistoryDetails, verifyClaim } from "../services/api";
 
 const STEPS = [
@@ -69,8 +70,16 @@ function Home() {
   const [error, setError] = useState("");
   const [pipelineMessage, setPipelineMessage] = useState("");
   const [recentClaims, setRecentClaims] = useState([]);
-  const [copied, setCopied] = useState(false);
   const handledNavClaimRef = useRef("");
+
+  const handleVoiceTranscript = useCallback((transcript) => {
+    setClaim(transcript);
+  }, []);
+
+  const { isListening, supported: voiceSupported, startListening, stopListening } =
+    useVoiceInput(handleVoiceTranscript);
+
+  const { isSpeaking, speak, stopSpeaking } = useVoiceOutput();
 
   const readResultCache = () => {
     try {
@@ -182,6 +191,16 @@ function Home() {
       .catch(() => setRecentClaims([]));
   }, [result]);
 
+  useEffect(() => {
+    if (result && result.verdict) {
+      const text =
+        `Verdict: ${result.verdict}. ` +
+        `Confidence: ${result.confidence} percent. ` +
+        `${result.reasoning || ""}`;
+      speak(text);
+    }
+  }, [result, speak]);
+
   const canSubmit = useMemo(() => claim.trim().length > 2 && !loading, [claim, loading]);
   const pipelineProgress = Math.min(100, (activeStep / STEPS.length) * 100);
 
@@ -255,15 +274,6 @@ function Home() {
     setLoading(false);
     setActiveStep(0);
     setPipelineMessage("");
-    setCopied(false);
-  };
-
-  const copyShareLink = () => {
-    if (!result?.short_id) return;
-    const link = `http://localhost:8000/api/share/${result.short_id}`;
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -278,7 +288,33 @@ function Home() {
           transition={{ type: "spring", stiffness: 300 }}
         />
         <div className="hero-actions">
-          <motion.button className="primary-btn" onClick={handleVerify} disabled={!canSubmit} whileTap={canSubmit ? { scale: 0.95 } : {}}>
+          {voiceSupported && (
+            <button
+              type="button"
+              onClick={isListening ? stopListening : startListening}
+              style={{
+                padding: "10px 18px",
+                marginRight: "10px",
+                borderRadius: "8px",
+                border: isListening ? "2px solid #ef4444" : "2px solid #e5e7eb",
+                background: isListening ? "#fee2e2" : "#f9fafb",
+                cursor: "pointer",
+                fontSize: "18px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                color: isListening ? "#dc2626" : "#374151",
+                fontWeight: 600,
+                transition: "all 0.2s",
+                animation: isListening ? "pulse 1.5s infinite" : "none",
+              }}
+              title={isListening ? "Click to stop recording" : "Click to speak your claim"}
+            >
+              {isListening ? "🔴" : "🎤"}
+              {isListening ? " Listening..." : " Speak"}
+            </button>
+          )}
+          <motion.button className="primary-btn verify-btn" onClick={handleVerify} disabled={!canSubmit} whileTap={canSubmit ? { scale: 0.95 } : {}}>
             {loading ? (
               <motion.div
                 animate={{ rotate: 360 }}
@@ -409,6 +445,38 @@ function Home() {
                       </a>
                     </div>
                   )}
+                  {result && result.verdict && (
+                    <button
+                      type="button"
+                      onClick={
+                        isSpeaking
+                          ? stopSpeaking
+                          : () =>
+                              speak(
+                                `Verdict: ${result.verdict}. ` +
+                                  `Confidence: ${result.confidence} percent. ` +
+                                  `${result.reasoning || ""}`
+                              )
+                      }
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "8px",
+                        border: "1.5px solid #e5e7eb",
+                        background: isSpeaking ? "#fef3c7" : "#f9fafb",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        marginTop: "8px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        color: "#374151",
+                        fontWeight: 500,
+                      }}
+                      title="Listen to verdict"
+                    >
+                      {isSpeaking ? "🔇 Stop" : "🔊 Read Verdict"}
+                    </button>
+                  )}
                 </div>
                 <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3, type: "spring" }}>
                   <ConfidenceGauge confidence={(Number(result.confidence) || 0) / 100} />
@@ -435,47 +503,12 @@ function Home() {
               </motion.div>
             </div>
 
-            <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
-              <h3>Claim</h3>
-              <p>{result.claim || claim}</p>
-              {result?.short_id && (
-                <button
-                  onClick={copyShareLink}
-                  style={{
-                    marginTop: "10px",
-                    padding: "6px 14px",
-                    background: "#6366f1",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {copied ? "Copied!" : "Copy Share Link"}
-                </button>
-              )}
-              {(result.sources || []).length > 0 && (
-                <div style={{ marginTop: "0.75rem" }}>
-                  <strong>Cited sources</strong>
-                  <ul className="bullet-list">
-                    {result.sources.map((src, idx) => (
-                      <li key={`${src.url || src.title}-${idx}`}>
-                        <a href={src.url} target="_blank" rel="noreferrer">
-                          {src.title || src.url}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </motion.div>
-
             {result.prosecutor && result.defender && (
-              <motion.div data-aos="fade-up" data-aos-duration="1000" className="two-col" variants={containerVariants}>
-                <motion.div variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
+              <motion.div data-aos="fade-up" data-aos-duration="1000" className="two-col agent-two-col" variants={containerVariants}>
+                <motion.div className="agent-col" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
                   <AgentCard role="prosecutor" result={result.prosecutor} evidence={result.prosecutor_evidence || result.evidence || []} />
                 </motion.div>
-                <motion.div variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
+                <motion.div className="agent-col" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
                   <AgentCard role="defender" result={result.defender} evidence={result.defender_evidence || result.evidence || []} />
                 </motion.div>
               </motion.div>

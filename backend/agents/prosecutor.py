@@ -1,76 +1,75 @@
-from llm_client import call_agent_json
+from llm_client import call_ollama, extract_json
 
 
-def build_evidence_text(evidence: list) -> str:
-    lines = []
-    for i, a in enumerate(evidence, 1):
-        cred_pct = int(a.get("credibility_score", 0) * 100)
-        lines.append(
-            f"Article {i}: {a.get('title', '')}\n"
-            f"  Source: {a.get('source', '')} "
-            f"(credibility: {cred_pct}%)\n"
-            f"  URL: {a.get('source_url', 'N/A')}\n"
-            f"  Content: "
-            f"{a.get('content', '')[:200]}"
+def run_prosecutor(claim: str, evidence: list) -> dict:
+    ev_text = ""
+    for i, article in enumerate(evidence[:4], 1):
+        title = article.get("title", "")
+        source = article.get("source", "Unknown")
+        content = article.get("content", "")[:300]
+        ev_text += (
+            f"\n--- Article {i} ---\n"
+            f"Title: {title}\n"
+            f"Source: {source}\n"
+            f"Content: {content}\n"
         )
-    return "\n\n".join(lines)
 
+    if not ev_text:
+        ev_text = "No evidence articles available."
 
-def prosecute(claim, evidence, domain):
-    """
-    Run prosecutor agent to find arguments against the claim.
-    NEVER raises — always returns a valid dict.
-    """
-    try:
-        evidence_text = build_evidence_text(evidence)
-        prompt = f"""You are a fact-checking prosecutor.
-Find arguments that CONTRADICT or DISPROVE this claim.
+    prompt = f"""You are a strict fact-checking prosecutor.
+Your job: find specific arguments AGAINST this claim
+using the actual content of the articles provided.
 
 CLAIM: \"{claim}\"
 
-EVIDENCE:
-{evidence_text}
+EVIDENCE ARTICLES:
+{ev_text}
 
-RULES:
-1. Only use evidence directly related to the claim
-2. Cite which source article contradicts the claim
-3. If claim appears TRUE, set prosecution_strength none
-4. Do NOT fabricate arguments
+INSTRUCTIONS:
+1. Read each article's actual content carefully
+2. Find what SPECIFICALLY in the article contradicts
+   or raises doubt about the claim
+3. Quote or paraphrase the actual fact from the article
+4. Format: "[Source Name] reports that [specific fact
+   from article] which contradicts the claim because
+   [reason]"
+5. If an article SUPPORTS the claim, say prosecution
+   strength is weak or none - do NOT fabricate arguments
+6. Never say "does not conclusively establish" - be specific
+
+BAD example (do not do this):
+"Article does not conclusively establish the claim."
+
+GOOD example (do this):
+"Al Jazeera reports that a two-week ceasefire was halted
+40 days into US-Israeli attacks, meaning the ceasefire
+existed but was temporary - contradicting a permanent
+ceasefire claim."
 
 Return ONLY valid JSON:
 {{
-  \"arguments\": [
-    \"Point 1 citing [Source Name]\",
-    \"Point 2 citing specific fact\"
+  "arguments": [
+    "Argument 1 with specific fact from [Source Name]",
+    "Argument 2 with specific fact from [Source Name]"
   ],
-  \"strongest_point\": \"most powerful contradiction\",
-  \"prosecution_strength\": \"strong/moderate/weak/none\"
+  "strongest_point": "Most specific contradiction with source",
+  "prosecution_strength": "strong/moderate/weak/none"
 }}"""
-        
-        result = call_agent_json(
-            prompt=prompt,
-            context="prosecutor",
-            temperature=0,
-            num_predict=500
-        )
-        
-        # Validate result has required fields
-        if not result.get("prosecution_strength"):
-            result["prosecution_strength"] = "weak"
-        if not result.get("arguments"):
-            result["arguments"] = [
-                "Insufficient evidence to prosecute"
-            ]
-        if not result.get("strongest_point"):
-            result["strongest_point"] = (
-                "No strong contradictions found"
-            )
-        return result
-        
-    except Exception as e:
-        print(f"[Prosecutor] Unexpected error: {e}")
+
+    raw = call_ollama(prompt, 0, 500, 768, "Prosecutor")
+    result = extract_json(raw)
+
+    if not result or not result.get("arguments"):
         return {
-            "arguments": ["Analysis failed"],
-            "strongest_point": "Unable to analyze",
-            "prosecution_strength": "none"
+            "arguments": ["No specific contradicting evidence found"],
+            "strongest_point": "No contradictions identified",
+            "prosecution_strength": "none",
         }
+
+    return result
+
+
+def prosecute(claim, evidence, domain):
+    # Compatibility wrapper for existing orchestrator imports.
+    return run_prosecutor(claim, evidence or [])

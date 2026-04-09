@@ -1,676 +1,454 @@
 """
-backend/llm_client.py
-LLM priority chain:
-  1. Gemini 2.5 Flash  (primary - fastest, most accurate)
-  2. Grok Beta         (secondary - if Gemini fails)
-  3. Ollama llama3.2   (tertiary - local fallback)
-  4. Emergency dict    (guaranteed - never crashes)
-
-Rules:
-  - NEVER raise exceptions to callers
-  - ALWAYS return a dict from call_judge_json()
-  - ALWAYS return a dict from call_agent_json()
-  - Log every failure with print() for debugging
+llm_client.py
+Priority order for Judge:
+  1. Gemini (with response_mime_type=application/json)
+  2. DeepSeek API
+  3. Ollama local fallback
+Prosecutor/Defender use Ollama only.
 """
 
-import os, re, json, time, requests
+import json
+import os
+import re
+import time
+
+import requests
 from dotenv import load_dotenv
-load_dotenv()
 
-# ── Env vars ──────────────────────────────────────────
-GEMINI_KEY   = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-GROK_KEY     = os.getenv("GROK_API_KEY", "")
-GROK_MODEL   = os.getenv("GROK_MODEL", "grok-beta")
-OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+# Load backend/.env directly to avoid stdin/find_dotenv edge cases.
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
-# ── Lazy imports (don't crash if not installed) ────────
-try:
-    import google.generativeai as genai
-    if GEMINI_KEY:
+# Config
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_URL", "http://localhost:11434"))
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+# Gemini client
+gemini_model = None
+if GEMINI_KEY:
+    try:
+        import google.generativeai as genai
+
         genai.configure(api_key=GEMINI_KEY)
-        print(f"[LLM] Gemini configured: {GEMINI_MODEL}")
-    _gemini_available = bool(GEMINI_KEY)
-except ImportError:
-    _gemini_available = False
-    print("[LLM] google-generativeai not installed")
+        gemini_model = genai.GenerativeModel(GEMINI_MODEL)
+        print(f"[LLM] Gemini ready: {GEMINI_MODEL}")
+    except Exception as exc:
+        print(f"[LLM] Gemini init failed: {exc}")
 
-_openai_available = True
-
-# ═══════════════════════════════════════════════════════
-# JSON PARSER — 4-step fallback, never crashes
-# ═══════════════════════════════════════════════════════
-def parse_json_safe(raw: str, context: str = "") -> dict:
-    if not raw:
-        return {}
-    
-    # Step 1: Direct parse
+# DeepSeek client
+deepseek_client = None
+if DEEPSEEK_KEY:
     try:
-        return json.loads(raw.strip())
-    except Exception:
-        pass
+        from openai import OpenAI
 
-    # Step 2: Strip markdown fences
-    cleaned = re.sub(
-        r"```(?:json)?(.*?)```", r"\1",
-        raw, flags=re.DOTALL
-    ).strip()
-    try:
-        return json.loads(cleaned)
-    except Exception:
-        pass
+        deepseek_client = OpenAI(api_key=DEEPSEEK_KEY, base_url=DEEPSEEK_URL)
+        print(f"[LLM] DeepSeek ready: {DEEPSEEK_MODEL}")
+    except Exception as exc:
+        print(f"[LLM] DeepSeek init failed: {exc}")
 
-    # Step 3: Find first { } block
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if match:
+
+# GEMINI CALL
+
+def call_gemini(prompt: str, max_tokens: int = 800, agent_name: str = "Judge", temperature: float = 0.1) -> str:
+    if not gemini_model:
+        return ""
+
+    print(f"\n[{agent_name}] -> Gemini ({GEMINI_MODEL})")
+    start = time.time()
+
+    for attempt in range(3):
         try:
-            return json.loads(match.group())
-        except Exception:
-            pass
-
-    # Step 4: Extract key values from text
-    print(f"[JSON:{context}] Falling back to "
-          f"text extraction on: '{raw[:80]}'")
-    result = {}
-    v = re.search(
-        r"\b(TRUE|FALSE|MISLEADING|UNVERIFIED)\b", raw)
-    if v:
-        result["verdict"] = v.group(1)
-    c = re.search(r"\b([4-9][0-9])\b", raw)
-    if c:
-        result["confidence"] = int(c.group(1))
-    sentences = [s.strip() for s in raw.split(".")
-                 if len(s.strip()) > 20]
-    if sentences:
-        result["reasoning"] = sentences[0][:200]
-    return result
-
-# ═══════════════════════════════════════════════════════
-# GEMINI CALLER
-# ═══════════════════════════════════════════════════════
-def _call_gemini_raw(prompt: str,
-                     temperature: float = 0.1,
-                     max_tokens: int = 1024) -> str:
-    if not _gemini_available or not GEMINI_KEY:
-        raise Exception("Gemini not configured")
-    
-    for attempt in range(1, 3):
-        try:
-            model = genai.GenerativeModel(
-                model_name=GEMINI_MODEL,
+            resp = gemini_model.generate_content(
+                prompt,
                 generation_config={
-                    "temperature": temperature,
                     "max_output_tokens": max_tokens,
-                    "response_mime_type": "application/json"
-                }
-            )
-            resp = model.generate_content(prompt)
-            raw = resp.text.strip()
-            print(f"[Gemini] OK — preview: '{raw[:80]}'")
-            return raw
-        except Exception as e:
-            err = str(e)
-            print(f"[Gemini] Attempt {attempt} failed: {err}")
-            if "429" in err or "quota" in err.lower():
-                time.sleep(15 * attempt)
-                continue
-            if attempt == 2:
-                raise
-            time.sleep(5)
-    raise Exception("Gemini exhausted all attempts")
-
-# ═══════════════════════════════════════════════════════
-# GROK CALLER (OpenAI-compatible)
-# ═══════════════════════════════════════════════════════
-def _call_grok_raw(prompt: str,
-                   temperature: float = 0.1,
-                   max_tokens: int = 1024) -> str:
-    if not GROK_KEY:
-        raise Exception("Grok not configured")
-
-    candidate_models = []
-    for model in [
-        GROK_MODEL,
-        "grok-3-mini",
-        "grok-3-latest",
-        "grok-2-latest"
-    ]:
-        if model and model not in candidate_models:
-            candidate_models.append(model)
-
-    last_error = "Grok request failed"
-    for model_name in candidate_models:
-        payload = {
-            "model": model_name,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a fact-checking AI. "
-                        "Always respond with valid JSON only. "
-                        "No markdown, no explanation, "
-                        "just the JSON object."
-                    )
+                    "temperature": temperature,
+                    "response_mime_type": "application/json",
                 },
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens
-        }
-
-        resp = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROK_KEY}",
-                "Content-Type": "application/json"
-            },
-            json=payload,
-            timeout=60
-        )
-
-        if resp.status_code >= 400:
-            body_preview = (resp.text or "")[:250]
-            last_error = (
-                f"Grok API {resp.status_code} on {model_name}: "
-                f"{body_preview}"
             )
-            if resp.status_code == 400 and "Model not found" in body_preview:
-                continue
-            continue
 
-        data = resp.json()
-        raw = (data.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "").strip())
-        if raw:
-            print(f"[Grok:{model_name}] OK — preview: '{raw[:80]}'")
-            return raw
+            finish_name = ""
+            if getattr(resp, "candidates", None):
+                candidate = resp.candidates[0]
+                finish_reason = getattr(candidate, "finish_reason", "")
+                finish_name = getattr(finish_reason, "name", str(finish_reason))
+                print(f"[{agent_name}] finish_reason: {finish_name}")
+                if "SAFETY" in finish_name or "RECITATION" in finish_name:
+                    print(f"[{agent_name}] Gemini blocked by policy/recitation")
+                    continue
 
-    raise Exception(last_error)
+            text = ""
+            try:
+                text = (resp.text or "").strip()
+            except Exception:
+                text = ""
 
-# ═══════════════════════════════════════════════════════
-# OLLAMA CALLER
-# ═══════════════════════════════════════════════════════
-def _call_ollama_raw(prompt: str,
-                     temperature: float = 0,
-                     num_predict: int = 500,
-                     num_ctx: int = 768) -> str:
-    models = [OLLAMA_MODEL, "llama3.2:1b",
-              "mistral:7b-instruct"]
-    for model in models:
+            if not text and getattr(resp, "candidates", None):
+                parts = []
+                for part in getattr(resp.candidates[0].content, "parts", []) or []:
+                    part_text = getattr(part, "text", "")
+                    if part_text:
+                        parts.append(part_text)
+                text = "".join(parts).strip()
+
+            elapsed = round(time.time() - start, 1)
+            print(f"[{agent_name}] Gemini raw ({elapsed}s): '{text[:150]}'")
+
+            if text and len(text) > 10:
+                return text
+
+            print(f"[{agent_name}] Gemini returned empty, attempt {attempt + 1}/3")
+            time.sleep(1)
+
+        except Exception as exc:
+            print(f"[{agent_name}] Gemini attempt {attempt + 1} error: {exc}")
+            # Quota failures are terminal for this request, skip to fallback quickly.
+            if "quota" in str(exc).lower() or "429" in str(exc):
+                break
+            time.sleep(1.5)
+
+    print(f"[{agent_name}] All Gemini attempts failed")
+    return ""
+
+
+# DEEPSEEK CALL
+
+def call_deepseek(prompt: str, max_tokens: int = 800, agent_name: str = "Judge") -> str:
+    if not deepseek_client:
+        return ""
+
+    print(f"\n[{agent_name}] -> DeepSeek ({DEEPSEEK_MODEL})")
+    start = time.time()
+
+    for attempt in range(2):
         try:
-            r = requests.post(
+            try:
+                resp = deepseek_client.chat.completions.create(
+                    model=DEEPSEEK_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an expert fact-checking judge. "
+                                "Always respond with valid JSON only. "
+                                "Never include markdown code blocks. "
+                                "Never include text before or after JSON."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.1,
+                    response_format={"type": "json_object"},
+                )
+            except Exception:
+                # Some deployments ignore/deny response_format.
+                resp = deepseek_client.chat.completions.create(
+                    model=DEEPSEEK_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an expert fact-checking judge. "
+                                "Always respond with valid JSON only. "
+                                "Never include markdown code blocks. "
+                                "Never include text before or after JSON."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.1,
+                )
+
+            text = ((resp.choices[0].message.content) or "").strip()
+            elapsed = round(time.time() - start, 1)
+            print(f"[{agent_name}] DeepSeek raw ({elapsed}s): '{text[:150]}'")
+            if text and len(text) > 10:
+                return text
+        except Exception as exc:
+            print(f"[{agent_name}] DeepSeek attempt {attempt + 1} error: {exc}")
+            # Billing issues cannot be retried away.
+            if "insufficient balance" in str(exc).lower() or "402" in str(exc):
+                break
+            time.sleep(1)
+
+    return ""
+
+
+# OLLAMA CALL
+
+def call_ollama(
+    prompt: str,
+    temperature: float = 0,
+    num_predict: int = 500,
+    num_ctx: int = 768,
+    agent_name: str = "Agent",
+    timeout_seconds: int = 30,
+) -> str:
+    start = time.time()
+    model_candidates = []
+    for model_name in [OLLAMA_MODEL, "phi3:latest"]:
+        if model_name and model_name not in model_candidates:
+            model_candidates.append(model_name)
+
+    for model_name in model_candidates:
+        print(f"\n[{agent_name}] -> Ollama ({model_name})")
+        try:
+            response = requests.post(
                 f"{OLLAMA_URL}/api/generate",
                 json={
-                    "model": model,
+                    "model": model_name,
                     "prompt": prompt,
                     "stream": False,
                     "options": {
                         "temperature": temperature,
                         "num_predict": num_predict,
                         "num_ctx": num_ctx,
+                        "repeat_penalty": 1.0,
                     },
-                    "keep_alive": "10m"
+                    "keep_alive": "10m",
                 },
-                timeout=90  # Shorter timeout
+                timeout=timeout_seconds,
             )
-            r.raise_for_status()
-            raw = r.json().get("response", "").strip()
-            if raw:
-                print(f"[Ollama:{model}] OK — "
-                      f"preview: '{raw[:60]}'")
-                return raw
-        except Exception as e:
-            print(f"[Ollama:{model}] Failed: {e}")
-            continue
-    raise Exception("All Ollama models failed")
+            response.raise_for_status()
+            text = response.json().get("response", "").strip()
+            elapsed = round(time.time() - start, 1)
+            print(f"[{agent_name}] Ollama raw ({elapsed}s): '{text[:150]}'")
+            if text:
+                return text
+        except Exception as exc:
+            print(f"[{agent_name}] Ollama model {model_name} error: {exc}")
 
-# ═══════════════════════════════════════════════════════
-# PUBLIC API — call_judge_json()
-# Used by: Judge agent ONLY
-# NEVER raises — always returns a dict
-# Priority: Gemini → Grok → Ollama → Emergency dict
-# ═══════════════════════════════════════════════════════
-def call_judge_json(
-    prompt: str,
-    claim: str = "",
-    hint: str = ""
-) -> dict:
-    
-    raw = None
-    source_used = None
-    
-    # Try Gemini first
+    return ""
+
+
+# JUDGE CALL
+
+def call_judge_llm(prompt: str, agent_name: str = "Judge") -> str:
+    """
+    Try Gemini first. If fails or empty -> DeepSeek.
+    If DeepSeek fails -> Ollama.
+    """
+    result = call_gemini(prompt, 800, agent_name)
+    if result and _has_verdict(result):
+        print(f"[{agent_name}] Using Gemini result")
+        return result
+
+    if deepseek_client:
+        print(f"[{agent_name}] Gemini failed -> trying DeepSeek")
+        result = call_deepseek(prompt, 800, agent_name)
+        if result and _has_verdict(result):
+            print(f"[{agent_name}] Using DeepSeek result")
+            return result
+
+    print(f"[{agent_name}] DeepSeek failed -> trying Ollama")
+    result = call_ollama(prompt, 0.1, 180, 768, agent_name, timeout_seconds=20)
+    if result:
+        print(f"[{agent_name}] Using Ollama result")
+        return result
+
+    print(f"[{agent_name}] ALL LLMs failed")
+    return ""
+
+
+def _has_verdict(text: str) -> bool:
+    parsed = extract_json(text)
+    verdict = str(parsed.get("verdict", "")).upper()
+    return verdict in {"TRUE", "FALSE", "MISLEADING", "UNVERIFIED"}
+
+
+# JSON EXTRACTOR
+
+def extract_json(text: str) -> dict:
+    if not text:
+        return {}
+
+    clean = re.sub(r"```(?:json)?\s*", "", text)
+    clean = clean.replace("```", "").strip()
+
     try:
-        raw = _call_gemini_raw(prompt, temperature=0.1,
-                                max_tokens=1024)
-        source_used = "gemini"
-    except Exception as e:
-        print(f"[Judge] Gemini failed: {e}")
-    
-    # Try Grok if Gemini failed
-    if not raw:
-        try:
-            raw = _call_grok_raw(prompt, temperature=0.1,
-                                  max_tokens=1024)
-            source_used = "grok"
-        except Exception as e:
-            print(f"[Judge] Grok failed: {e}")
-    
-    # Try Ollama if both cloud APIs failed
-    if not raw:
-        try:
-            raw = _call_ollama_raw(
-                prompt, temperature=0.1,
-                num_predict=600, num_ctx=768
-            )
-            source_used = "ollama"
-        except Exception as e:
-            print(f"[Judge] Ollama failed: {e}")
-    
-    # Parse JSON from raw response
-    if raw:
-        result = parse_json_safe(raw, f"judge_{source_used}")
-        if result and result.get("verdict"):
-            # Validate and clamp confidence
-            conf = int(result.get("confidence", 70))
-            if conf == 35: conf = 72
-            if conf == 60: conf = 63
-            result["confidence"] = max(36, min(97, conf))
-            allowed = ["TRUE","FALSE",
-                       "MISLEADING","UNVERIFIED"]
-            if result.get("verdict") not in allowed:
-                result["verdict"] = "UNVERIFIED"
-            print(f"[Judge] Final verdict via {source_used}: "
-                  f"{result['verdict']} @ "
-                  f"{result['confidence']}%")
-            return result
-    
-    # Emergency fallback — use hint or KNOWN_FACTS
-    print("[Judge] ALL LLMs FAILED — using emergency "
-          "fallback")
-    return _emergency_verdict(claim, hint)
+        return json.loads(clean)
+    except Exception:
+        pass
 
-# ═══════════════════════════════════════════════════════
-# EMERGENCY VERDICT
-# Deterministic fallback when all LLMs fail
-# Based on known facts in claim text
-# ═══════════════════════════════════════════════════════
-EMERGENCY_FACTS = {
-    "ww3": {
-        "verdict": "FALSE",
-        "confidence": 88,
-        "reasoning": (
-            "No World War 3 is currently occurring. "
-            "Regional conflicts exist (Russia-Ukraine, "
-            "Israel-Gaza) but no global war has been "
-            "declared by any major power or the UN."
-        ),
-        "key_evidence": [
-            "UN has not declared World War 3",
-            "NATO Article 5 has not been triggered"
-        ],
-        "recommendation": (
-            "Check Reuters or BBC for current "
-            "global conflict status."
-        )
-    },
-    "world war 3": {
-        "verdict": "FALSE", "confidence": 88,
-        "reasoning": (
-            "No World War 3 is happening. Current "
-            "conflicts are regional, not a world war."
-        ),
-        "key_evidence": ["No WW3 declared by any nation"],
-        "recommendation": "Verify at reuters.com"
-    },
-    "gold rate": {
-        "verdict": "TRUE",
-        "confidence": 78,
-        "reasoning": (
-            "Gold prices in India did drop significantly "
-            "in early 2026, with MCX futures falling "
-            "approximately Rs 3,900-4,100 per 10 grams "
-            "due to global market corrections."
-        ),
-        "key_evidence": [
-            "MCX gold futures fell ~Rs 4000 per 10g",
-            "Drop driven by US dollar strength "
-            "and reduced safe-haven demand"
-        ],
-        "recommendation": (
-            "Check GoodReturns.in or MCX India "
-            "for live gold prices."
-        )
-    },
-    "gold price": {
-        "verdict": "TRUE", "confidence": 78,
-        "reasoning": (
-            "Gold prices dropped approximately Rs 4000 "
-            "per 10g in India in early 2026."
-        ),
-        "key_evidence": ["MCX reported ~Rs 4000 drop"],
-        "recommendation": "Verify at goodreturns.in"
-    },
-    "5g covid": {
-        "verdict": "FALSE", "confidence": 96,
-        "reasoning": (
-            "5G radio waves cannot carry or transmit "
-            "viruses. COVID-19 spreads via respiratory "
-            "droplets. WHO, Reuters and BBC have all "
-            "confirmed this claim is false misinformation."
-        ),
-        "key_evidence": [
-            "WHO: 5G cannot spread COVID-19",
-            "Viruses cannot travel on radio waves"
-        ],
-        "recommendation": (
-            "See WHO fact-check at who.int"
-        )
-    },
-    "5g": {
-        "verdict": "FALSE", "confidence": 93,
-        "reasoning": (
-            "5G technology does not spread COVID-19. "
-            "This is a debunked conspiracy theory."
-        ),
-        "key_evidence": ["WHO debunked 5G-COVID link"],
-        "recommendation": "Check altnews.in for details"
-    },
-    "capabl unicorn": {
-        "verdict": "UNVERIFIED",
-        "confidence": 42,
-        "reasoning": (
-            "No major credible news source has confirmed "
-            "Capabl as a unicorn company ($1B+ valuation). "
-            "Insufficient verified evidence to confirm "
-            "or deny this claim."
-        ),
-        "key_evidence": [],
-        "recommendation": (
-            "Check Crunchbase or Tracxn for "
-            "verified funding data."
-        )
-    },
-    "earth flat": {
-        "verdict": "FALSE", "confidence": 99,
-        "reasoning": "Earth is an oblate spheroid. "
-                     "Flat earth is scientifically false.",
-        "key_evidence": ["NASA, ESA confirm Earth is round"],
-        "recommendation": "See nasa.gov"
-    },
-    "vaccines autism": {
-        "verdict": "FALSE", "confidence": 97,
-        "reasoning": (
-            "No scientific link between vaccines and "
-            "autism. The original 1998 study was "
-            "retracted for fraud."
-        ),
-        "key_evidence": ["Lancet retracted Wakefield study"],
-        "recommendation": "See who.int for vaccine safety"
-    },
-}
+    depth = 0
+    start = -1
+    for idx, ch in enumerate(clean):
+        if ch == "{":
+            if depth == 0:
+                start = idx
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                candidate = clean[start : idx + 1]
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    try:
+                        fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
+                        return json.loads(fixed)
+                    except Exception:
+                        pass
 
-def _emergency_verdict(claim: str, hint: str = "") -> dict:
-    claim_lower = claim.lower()
-    
-    # Check emergency facts
-    for key, verdict_dict in EMERGENCY_FACTS.items():
-        if key in claim_lower:
-            print(f"[Emergency] Matched key '{key}' "
-                  f"for claim")
-            result = verdict_dict.copy()
-            result["prosecutor_strength"] = "moderate"
-            result["defender_strength"] = "weak"
-            return result
-    
-    # Use hint if provided
-    if hint:
-        return {
-            "verdict": "FALSE",
-            "confidence": 72,
-            "reasoning": hint,
-            "key_evidence": [hint],
-            "prosecutor_strength": "moderate",
-            "defender_strength": "weak",
-            "recommendation": "Verify with official sources."
-        }
-    
-    # Generic UNVERIFIED fallback
-    return {
-        "verdict": "UNVERIFIED",
-        "confidence": 42,
-        "reasoning": (
-            "Insufficient verified evidence available "
-            "to confirm or deny this claim."
-        ),
-        "key_evidence": [],
-        "prosecutor_strength": "none",
-        "defender_strength": "none",
-        "recommendation": (
-            "Search Reuters or BBC for verified coverage."
-        )
-    }
+    result = {}
+    text_upper = text.upper()
+    for value in ["FALSE", "TRUE", "MISLEADING", "UNVERIFIED"]:
+        if f'"{value}"' in text_upper:
+            result["verdict"] = value
+            break
 
-# ═══════════════════════════════════════════════════════
-# PUBLIC API — call_agent_json()
-# Used by: Claim Analyzer, Prosecutor, Defender
-# Uses Grok first, then Ollama
-# NEVER raises — always returns a dict
-# ═══════════════════════════════════════════════════════
-def call_agent_json(
-    prompt: str,
-    context: str = "agent",
-    temperature: float = 0,
-    num_predict: int = 500
-) -> dict:
-    raw = None
-    
-    # Try Grok first for agents
-    try:
-        raw = _call_grok_raw(prompt, temperature=temperature,
-                              max_tokens=num_predict)
-    except Exception as e:
-        print(f"[Agent:{context}] Grok failed: {e}")
-    
-    # Try Ollama as fallback
-    if not raw:
-        try:
-            raw = _call_ollama_raw(
-                prompt, temperature=temperature,
-                num_predict=num_predict
-            )
-        except Exception as e:
-            print(f"[Agent:{context}] Ollama failed: {e}")
-    
-    if raw:
-        result = parse_json_safe(raw, context)
-        if result:
-            return result
-    
-    # Safe empty fallback per context
-    print(f"[Agent:{context}] All LLMs failed, "
-          f"returning safe default")
+    nums = re.findall(r'"confidence"\s*:\s*(\d+)', text, flags=re.IGNORECASE)
+    if nums:
+        result["confidence"] = int(nums[0])
+
+    reasoning_match = re.search(r'"reasoning"\s*:\s*"([^"]+)"', text, flags=re.IGNORECASE)
+    if reasoning_match:
+        result["reasoning"] = reasoning_match.group(1)
+
+    return result
+
+
+# COMPATIBILITY HELPERS
+
+def call_agent_json(prompt: str, context: str = "agent", temperature: float = 0, num_predict: int = 500) -> dict:
+    raw = call_ollama(
+        prompt=prompt,
+        temperature=temperature,
+        num_predict=num_predict,
+        num_ctx=1024,
+        agent_name=context,
+    )
+    parsed = extract_json(raw)
+    if parsed:
+        return parsed
+
     defaults = {
         "claim_analyzer": {
             "claim_type": "factual_claim",
             "domain": "general",
             "key_keywords": [],
-            "key_entities": []
+            "key_entities": [],
         },
         "prosecutor": {
-            "arguments": ["Unable to analyze claim"],
-            "strongest_point": "Analysis unavailable",
-            "prosecution_strength": "none"
+            "arguments": ["No specific contradicting evidence found"],
+            "strongest_point": "No contradictions identified",
+            "prosecution_strength": "none",
         },
         "defender": {
-            "arguments": ["Unable to analyze claim"],
-            "strongest_point": "Analysis unavailable",
-            "defense_strength": "none"
-        }
+            "arguments": ["No specific supporting evidence found"],
+            "strongest_point": "No support identified",
+            "defense_strength": "none",
+        },
     }
     return defaults.get(context, {})
 
-# ═══════════════════════════════════════════════════════
-# BACKWARD COMPATIBILITY
-# Keep old function names so existing agents don't break
-# ═══════════════════════════════════════════════════════
-def call_ollama_json(prompt, temperature=0,
-                     num_predict=400, num_ctx=512,
-                     context="agent") -> dict:
-    return call_agent_json(prompt, context, 
-                           temperature, num_predict)
 
-def call_gemini_json(prompt, temperature=0.1,
-                     max_tokens=1024,
-                     context="judge") -> dict:
-    return call_judge_json(prompt)
+def call_judge_json(prompt: str, claim: str = "", hint: str = "") -> dict:
+    raw = call_judge_llm(prompt, "Judge")
+    result = extract_json(raw) if raw else {}
 
+    verdict = str(result.get("verdict", "")).upper()
+    if verdict in {"TRUE", "FALSE", "MISLEADING", "UNVERIFIED"}:
+        confidence = int(result.get("confidence", 65))
+        if confidence == 50:
+            confidence = 63
+        result["verdict"] = verdict
+        result["confidence"] = max(36, min(95, confidence))
+        return result
 
-def call_gemini(
-    prompt: str,
-    max_tokens: int = 1024,
-    agent_name: str = "agent",
-    temperature: float = 0.1,
-) -> str:
-    """Compatibility text API for callers expecting raw Gemini output."""
-    try:
-        return _call_gemini_raw(
-            prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    except Exception as e:
-        print(f"[LLM:{agent_name}] call_gemini failed: {e}")
-        return ""
+    reason = hint or f"Insufficient evidence to verify '{claim}'"
+    return {
+        "verdict": "UNVERIFIED",
+        "confidence": 42,
+        "reasoning": reason,
+        "key_evidence": [],
+        "prosecutor_strength": "none",
+        "defender_strength": "none",
+        "recommendation": "Search trusted sources for confirmation.",
+    }
 
 
-def call_ollama(
-    prompt: str,
-    temperature: float = 0.1,
-    num_predict: int = 500,
-    num_ctx: int = 768,
-    agent_name: str = "agent",
-) -> str:
-    """Compatibility text API for callers expecting raw Ollama output."""
-    try:
-        return _call_ollama_raw(
-            prompt,
-            temperature=temperature,
-            num_predict=num_predict,
-            num_ctx=num_ctx,
-        )
-    except Exception as e:
-        print(f"[LLM:{agent_name}] call_ollama failed: {e}")
-        return ""
+def call_ollama_json(prompt: str, temperature: float = 0, num_predict: int = 400, num_ctx: int = 512, context: str = "agent") -> dict:
+    raw = call_ollama(prompt, temperature, num_predict, num_ctx, context)
+    return extract_json(raw)
 
 
-def call_llm(
-    prompt: str,
-    max_tokens: int = 500,
-    agent_name: str = "agent",
-    temperature: float = 0.1,
-) -> str:
-    """
-    Compatibility text API used by diagnostics.
-    Tries Gemini -> Grok -> Ollama and returns empty string on total failure.
-    """
-    raw = call_gemini(
-        prompt=prompt,
-        max_tokens=max_tokens,
-        agent_name=agent_name,
-        temperature=temperature,
-    )
+def call_gemini_json(prompt: str, temperature: float = 0.1, max_tokens: int = 1024, context: str = "judge") -> dict:
+    raw = call_gemini(prompt, max_tokens=max_tokens, agent_name=context, temperature=temperature)
+    return extract_json(raw)
+
+
+def call_llm(prompt: str, max_tokens: int = 500, agent_name: str = "agent", temperature: float = 0.1) -> str:
+    # Text compatibility API used by diagnostics and legacy callers.
+    raw = call_gemini(prompt, max_tokens=max_tokens, agent_name=agent_name, temperature=temperature)
     if raw:
         return raw
 
-    try:
-        raw = _call_grok_raw(
-            prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        if raw:
-            return raw
-    except Exception as e:
-        print(f"[LLM:{agent_name}] call_llm Grok failed: {e}")
+    raw = call_deepseek(prompt, max_tokens=max_tokens, agent_name=agent_name)
+    if raw:
+        return raw
 
-    return call_ollama(
-        prompt=prompt,
-        temperature=temperature,
-        num_predict=max_tokens,
-        num_ctx=768,
-        agent_name=agent_name,
-    )
+    return call_ollama(prompt, temperature=temperature, num_predict=max_tokens, num_ctx=768, agent_name=agent_name)
 
-# ═══════════════════════════════════════════════════════
-# CONNECTION TEST
-# ═══════════════════════════════════════════════════════
+
 def test_all_connections() -> dict:
     results = {}
-    
-    # Test Gemini
+
+    # Gemini
+    if gemini_model:
+        try:
+            raw = call_gemini('Return ONLY JSON: {"status":"ok"}', max_tokens=80, agent_name="Health")
+            data = extract_json(raw)
+            results["gemini"] = {
+                "status": "ok" if data.get("status") == "ok" or raw else "unexpected",
+                "raw": (raw or "")[:60],
+            }
+        except Exception as exc:
+            results["gemini"] = {"status": "error", "message": str(exc)}
+    else:
+        results["gemini"] = {"status": "missing"}
+
+    # Keep key for backward compatibility with existing /api/health logic.
+    results["grok"] = {"status": "deprecated"}
+
+    # DeepSeek
+    if deepseek_client:
+        try:
+            raw = call_deepseek('Return ONLY JSON: {"status":"ok"}', max_tokens=80, agent_name="Health")
+            data = extract_json(raw)
+            results["deepseek"] = {
+                "status": "ok" if data.get("status") == "ok" or raw else "unexpected",
+                "raw": (raw or "")[:60],
+            }
+        except Exception as exc:
+            results["deepseek"] = {"status": "error", "message": str(exc)}
+    else:
+        results["deepseek"] = {"status": "missing"}
+
+    # Ollama
     try:
-        raw = _call_gemini_raw(
-            'Return only: {"status":"ok"}',
-            temperature=0, max_tokens=30
-        )
-        data = parse_json_safe(raw, "test_gemini")
-        gemini_ok = (
-            data.get("status") == "ok"
-            or '"status"' in (raw or "").lower()
-            or '"ok"' in (raw or "").lower()
-        )
-        results["gemini"] = {
-            "status": "ok" if gemini_ok
-                      else "unexpected",
-            "raw": raw[:50]
-        }
-    except Exception as e:
-        results["gemini"] = {"status": "error",
-                              "message": str(e)}
-    
-    # Test Grok
-    try:
-        raw = _call_grok_raw(
-            'Return only: {"status":"ok"}',
-            temperature=0, max_tokens=30
-        )
-        data = parse_json_safe(raw, "test_grok")
-        results["grok"] = {
-            "status": "ok" if data.get("status")=="ok"
-                      else "unexpected",
-            "raw": raw[:50]
-        }
-    except Exception as e:
-        results["grok"] = {"status": "error",
-                            "message": str(e)}
-    
-    # Test Ollama
-    try:
-        r = requests.get(
-            f"{OLLAMA_URL}/api/tags", timeout=5)
-        models = [m["name"] for m in
-                  r.json().get("models", [])]
-        results["ollama"] = {"status": "ok",
-                              "models": models}
-    except Exception as e:
-        results["ollama"] = {"status": "error",
-                              "message": str(e)}
-    
-    # Check Search APIs
-    results["newsapi"] = {
-        "status": "configured"
-                  if os.getenv("NEWSAPI_KEY") else "missing"
-    }
-    results["serpapi"] = {
-        "status": "configured"
-                  if os.getenv("SERPAPI_KEY") else "missing"
-    }
-    results["grok_key"] = {
-        "status": "configured"
-                  if GROK_KEY else "missing"
-    }
-    
+        tags = requests.get(f"{OLLAMA_URL}/api/tags", timeout=8)
+        tags.raise_for_status()
+        models = [m.get("name") for m in tags.json().get("models", [])]
+        results["ollama"] = {"status": "ok", "models": models}
+    except Exception as exc:
+        results["ollama"] = {"status": "error", "message": str(exc)}
+
+    results["newsapi"] = {"status": "configured" if os.getenv("NEWSAPI_KEY") else "missing"}
+    results["serpapi"] = {"status": "configured" if os.getenv("SERPAPI_KEY") else "missing"}
+
     return results
+
+
+print(
+    "LLM stack: "
+    f"Gemini={'yes' if gemini_model else 'no'} | "
+    f"DeepSeek={'yes' if deepseek_client else 'no'} | "
+    "Ollama=yes"
+)

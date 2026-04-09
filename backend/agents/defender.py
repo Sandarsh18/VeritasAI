@@ -1,70 +1,75 @@
-from llm_client import call_agent_json
+from llm_client import call_ollama, extract_json
 
 
-def build_evidence_text(evidence: list) -> str:
-    lines = []
-    for i, a in enumerate(evidence, 1):
-        cred_pct = int(a.get("credibility_score", 0) * 100)
-        lines.append(
-            f"Article {i}: {a.get('title', '')}\n"
-            f"  Source: {a.get('source', '')} "
-            f"(credibility: {cred_pct}%)\n"
-            f"  URL: {a.get('source_url', 'N/A')}\n"
-            f"  Content: "
-            f"{a.get('content', '')[:200]}"
+def run_defender(claim: str, evidence: list) -> dict:
+    ev_text = ""
+    for i, article in enumerate(evidence[:4], 1):
+        title = article.get("title", "")
+        source = article.get("source", "Unknown")
+        content = article.get("content", "")[:300]
+        ev_text += (
+            f"\n--- Article {i} ---\n"
+            f"Title: {title}\n"
+            f"Source: {source}\n"
+            f"Content: {content}\n"
         )
-    return "\n\n".join(lines)
 
+    if not ev_text:
+        ev_text = "No evidence articles available."
 
-def defend(claim, evidence, domain):
-    """
-    Run defender agent to find arguments supporting the claim.
-    NEVER raises — always returns a valid dict.
-    """
-    try:
-        evidence_text = build_evidence_text(evidence)
-        prompt = f"""You are a researcher defending a claim.
-Find arguments that SUPPORT this claim.
+    prompt = f"""You are a researcher defending a claim.
+Your job: find specific arguments FOR this claim
+using the actual content of the articles provided.
 
 CLAIM: \"{claim}\"
 
-EVIDENCE:
-{evidence_text}
+EVIDENCE ARTICLES:
+{ev_text}
+
+INSTRUCTIONS:
+1. Read each article's actual content carefully
+2. Find what SPECIFICALLY in the article supports
+   or is consistent with the claim
+3. Quote or paraphrase the actual fact from the article
+4. Format: "[Source Name] states that [specific fact
+   from article] which supports the claim because [reason]"
+5. If an article CONTRADICTS the claim, say defense
+   strength is weak - do NOT fabricate support
+6. Never say "contains details that support the core
+   claim wording" - be specific about what those details are
+
+BAD example:
+"BBC contains details that support the core claim wording."
+
+GOOD example:
+"BBC reports that Iran and the US agreed to a
+conditional two-week ceasefire allowing shipping
+through Strait of Hormuz - directly confirming
+a ceasefire agreement exists."
 
 Return ONLY valid JSON:
 {{
-  \"arguments\": [
-    \"Supporting point 1\",
-    \"Supporting point 2\"
+  "arguments": [
+    "Argument 1 with specific fact from [Source Name]",
+    "Argument 2 with specific fact from [Source Name]"
   ],
-  \"strongest_point\": \"strongest support for claim\",
-  \"defense_strength\": \"strong/moderate/weak/none\"
+  "strongest_point": "Most specific supporting fact with source",
+  "defense_strength": "strong/moderate/weak/none"
 }}"""
 
-        result = call_agent_json(
-            prompt=prompt,
-            context="defender",
-            temperature=0,
-            num_predict=500
-        )
-        
-        # Validate result has required fields
-        if not result.get("defense_strength"):
-            result["defense_strength"] = "weak"
-        if not result.get("arguments"):
-            result["arguments"] = [
-                "Insufficient evidence to defend"
-            ]
-        if not result.get("strongest_point"):
-            result["strongest_point"] = (
-                "No strong support found"
-            )
-        return result
-        
-    except Exception as e:
-        print(f"[Defender] Unexpected error: {e}")
+    raw = call_ollama(prompt, 0, 500, 768, "Defender")
+    result = extract_json(raw)
+
+    if not result or not result.get("arguments"):
         return {
-            "arguments": ["Analysis failed"],
-            "strongest_point": "Unable to analyze",
-            "defense_strength": "none"
+            "arguments": ["No specific supporting evidence found"],
+            "strongest_point": "No support identified",
+            "defense_strength": "none",
         }
+
+    return result
+
+
+def defend(claim, evidence, domain):
+    # Compatibility wrapper for existing orchestrator imports.
+    return run_defender(claim, evidence or [])

@@ -16,10 +16,10 @@ from sqlalchemy.orm import Session
 
 from agents import calculate_disagreement_score, decompose_claim, run_claim_graph
 from auth import (
-    authenticate_user,
     create_access_token,
     get_current_user,
     get_password_hash,
+    verify_password,
     verify_token,
 )
 from credibility import score_source
@@ -73,13 +73,15 @@ class ClaimRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    username: str
+    username: str | None = None
+    name: str | None = None
     email: str
     password: str
 
 
 class LoginRequest(BaseModel):
-    username: str
+    username: str | None = None
+    email: str | None = None
     password: str
 
 
@@ -130,10 +132,6 @@ def _save_history(
 
 def _known_fact_override(claim_text: str, verdict: str, confidence: int):
     lower = (claim_text or "").lower()
-    weak_result = verdict in {"MISLEADING", "UNVERIFIED"} or confidence <= 55
-
-    if not weak_result:
-        return None
 
     known_rules = [
         (
@@ -267,6 +265,46 @@ def _clean_points(points: List[str]) -> List[str]:
     return cleaned
 
 
+def _is_comparison_claim(claim: str) -> bool:
+    lower = (claim or "").lower()
+    cues = [
+        "better", "worse", "than", "vs", "versus", "compare", "comparison",
+        "stronger", "weaker", "higher", "lower", "best"
+    ]
+    return any(cue in lower for cue in cues)
+
+
+def _comparison_cache_looks_off(claim: str, cached_evidence: List[Dict]) -> bool:
+    if not _is_comparison_claim(claim):
+        return False
+    if not cached_evidence:
+        return True
+
+    stats_cues = [
+        "stats", "statistics", "record", "head-to-head", "head to head", "h2h",
+        "win rate", "wins", "losses", "percentage", "average", "strike rate", "economy"
+    ]
+    noisy_cues = [
+        "schedule", "fixtures", "fixture", "next match", "upcoming", "today match",
+        "preview", "predicted xi", "playing xi", "target", "toss"
+    ]
+
+    stats_hits = 0
+    noise_hits = 0
+    for item in cached_evidence[:8]:
+        text = f"{item.get('title', '')} {item.get('content', '')}".lower()
+        if any(cue in text for cue in stats_cues):
+            stats_hits += 1
+        if any(cue in text for cue in noisy_cues):
+            noise_hits += 1
+
+    if stats_hits == 0:
+        return True
+    if noise_hits >= max(2, len(cached_evidence[:8]) // 2 + 1):
+        return True
+    return False
+
+
 def _fallback_side_points(results: List[Dict], side: str) -> List[str]:
     points: List[str] = []
     label = "supports" if side == "defender" else "raises doubt about"
@@ -295,55 +333,103 @@ def _claim_terms(claim: str) -> List[str]:
     return [t for t in tokens if t and t not in stop and len(t) > 2]
 
 
+def _source_row_key(row: Dict) -> str:
+    link = str(row.get("link", "") or "").strip().lower()
+    if link:
+        return link
+
+    title = str(row.get("title", "") or "").strip().lower()
+    snippet = str(row.get("snippet", "") or "").strip().lower()
+    return f"{title}|{snippet[:120]}"
+
+
 def _stance_scores(claim: str, row: Dict) -> tuple[int, int]:
     text = f"{row.get('title', '')} {row.get('snippet', '')}".lower()
     terms = _claim_terms(claim)
 
     contradict_cues = [
         "false", "fake", "myth", "debunk", "debunked", "no evidence", "not true",
-        "cannot", "can't", "incorrect", "hoax", "misleading", "conspiracy"
+        "cannot", "can't", "incorrect", "hoax", "misleading", "conspiracy", "denied",
+        "refuted", "rejected", "fails", "failed", "did not", "didn't", "never"
     ]
     support_cues = [
-        "true", "confirmed", "supports", "evidence shows", "is", "are", "exists", "can"
+        "true", "confirmed", "supports", "supported", "evidence shows", "verified",
+        "official", "announced", "approved", "included", "will be", "scheduled"
     ]
 
-    claim_match = sum(1 for term in terms if term in text)
-    contradict_score = claim_match + sum(2 for cue in contradict_cues if cue in text)
-    support_score = claim_match + sum(1 for cue in support_cues if cue in text)
+    contradict_score = sum(2 for cue in contradict_cues if cue in text)
+    support_score = sum(2 for cue in support_cues if cue in text)
+
+    overlap = sum(1 for term in terms if term in text)
+    if overlap:
+        support_score += 1
+        contradict_score += 1
+
+    for term in terms:
+        if f"not {term}" in text or f"no {term}" in text:
+            contradict_score += 2
+
     return support_score, contradict_score
 
 
 def _partition_sources_by_stance(claim: str, results: List[Dict], verdict: str) -> tuple[List[Dict], List[Dict]]:
     supportive: List[Dict] = []
     contradictory: List[Dict] = []
+    neutral: List[Dict] = []
+    seen: set[str] = set()
 
     for row in results or []:
+        key = _source_row_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+
         support_score, contradict_score = _stance_scores(claim, row)
-        if contradict_score > support_score:
+        if contradict_score >= support_score + 2:
             contradictory.append(row)
-        elif support_score > contradict_score:
+        elif support_score >= contradict_score + 2:
             supportive.append(row)
         else:
-            if (verdict or "").upper() == "FALSE":
+            neutral.append(row)
+
+    for row in neutral:
+        if len(supportive) <= len(contradictory):
+            supportive.append(row)
+        else:
+            contradictory.append(row)
+
+    total_unique = len(supportive) + len(contradictory)
+    if total_unique >= 2:
+        if not contradictory and supportive:
+            contradictory.append(supportive.pop())
+        if not supportive and contradictory:
+            supportive.append(contradictory.pop())
+
+    if not supportive and not contradictory and results:
+        if (verdict or "").upper() == "FALSE":
+            contradictory = [results[0]]
+        elif (verdict or "").upper() == "TRUE":
+            supportive = [results[0]]
+        else:
+            supportive = [results[0]]
+
+    support_keys = {_source_row_key(r) for r in supportive}
+    contradictory = [r for r in contradictory if _source_row_key(r) not in support_keys]
+
+    if not contradictory:
+        for row in results or []:
+            key = _source_row_key(row)
+            if key not in support_keys:
                 contradictory.append(row)
-            elif (verdict or "").upper() == "TRUE":
+                break
+
+    if not supportive:
+        contradiction_keys = {_source_row_key(r) for r in contradictory}
+        for row in results or []:
+            key = _source_row_key(row)
+            if key not in contradiction_keys:
                 supportive.append(row)
-            else:
-                if len(contradictory) <= len(supportive):
-                    contradictory.append(row)
-                else:
-                    supportive.append(row)
-
-    if not contradictory and supportive:
-        contradictory = supportive[:1]
-    if not supportive and contradictory:
-        supportive = contradictory[:1]
-
-    # hard non-overlap by URL
-    support_urls = {r.get("link", "") for r in supportive if r.get("link")}
-    contradictory = [r for r in contradictory if not r.get("link") or r.get("link") not in support_urls]
-    if not contradictory and supportive:
-        contradictory = supportive[:1]
+                break
 
     return supportive[:5], contradictory[:5]
 
@@ -394,24 +480,76 @@ def _clean_snippet(text: str) -> str:
     return value[:220]
 
 
-def _source_backed_points(rows: List[Dict], side: str) -> List[str]:
+def _row_text(row: Dict) -> str:
+    return f"{row.get('title', '')} {row.get('snippet', '')}".lower()
+
+
+def _claim_is_present_tense(claim: str) -> bool:
+    text = (claim or "").lower()
+    future_cues = [" will ", " going to ", " expected ", " forecast", " projected "]
+    return not any(cue in f" {text} " for cue in future_cues)
+
+
+def _prosecutor_challenge_reason(claim: str, row: Dict) -> str:
+    text = _row_text(row)
+    snippet = _clean_snippet(row.get("snippet", ""))
+
+    if _claim_is_present_tense(claim) and any(
+        cue in text
+        for cue in ["will", "expected", "forecast", "projected", "by 20", "target"]
+    ):
+        return "describes a projection or timeline rather than a confirmed current fact"
+
+    if any(cue in text for cue in ["says govt", "government said", "official statement", "according to government"]):
+        return "leans on an official assertion that still needs independent corroboration"
+
+    if any(cue in text for cue in ["ppp", "per capita", "nominal"]):
+        return "uses a specific economic/statistical metric that may not match the claim wording"
+
+    if any(cue in text for cue in ["could", "may", "might", "if", "subject to", "pending"]):
+        return "is conditional and therefore not definitive evidence for the claim as written"
+
+    if snippet:
+        return f"reports this specific detail: '{snippet}', which conflicts with part of the claim wording"
+
+    return "reports details that conflict with part of the claim wording"
+
+
+def _defender_support_reason(row: Dict) -> str:
+    text = _row_text(row)
+    snippet = _clean_snippet(row.get("snippet", ""))
+
+    if any(cue in text for cue in ["surpassed", "overtook", "ranked", "is now", "has become"]):
+        return "contains direct status/ranking information aligned with the claim"
+
+    if any(cue in text for cue in ["head-to-head", "head to head", "record", "stats", "wins", "losses", "percentage"]):
+        return "provides quantitative stats aligned with the claim"
+
+    if snippet:
+        return f"reports this specific detail: '{snippet}', which supports the claim wording"
+
+    return "reports concrete details aligned with the claim wording"
+
+
+def _source_backed_points(claim: str, rows: List[Dict], side: str) -> List[str]:
     points: List[str] = []
-    stance = "supports" if side == "defender" else "challenges"
-    actor = "Defender" if side == "defender" else "Prosecutor"
 
     for row in rows[:4]:
         title = (row.get("title") or "Untitled source").strip()
         snippet = _clean_snippet(row.get("snippet", ""))
         link = row.get("link", "")
         domain = _source_domain(link) or (row.get("source") or "source")
+        source_title = f"{title} ({domain})"
+
+        if side == "prosecutor":
+            reason = _prosecutor_challenge_reason(claim, row)
+            statement = f"Source Title: {source_title} | Justification: This is against the claim because it {reason}."
+        else:
+            reason = _defender_support_reason(row)
+            statement = f"Source Title: {source_title} | Justification: This supports the claim because it {reason}."
 
         if snippet:
-            statement = f"{actor} cites {title} ({domain}) which {stance} the claim: {snippet}."
-        else:
-            statement = f"{actor} cites {title} ({domain}) which {stance} the claim."
-
-        if link:
-            statement = f"{statement} Source: {link}"
+            statement = f"{statement} We found this: {snippet}."
 
         points.append(statement)
 
@@ -421,34 +559,144 @@ def _source_backed_points(rows: List[Dict], side: str) -> List[str]:
     return _clean_points(points)[:4]
 
 
-def _reasoning_points_with_sources(verdict: str, supportive_rows: List[Dict], contradictory_rows: List[Dict]) -> List[str]:
-    lines: List[str] = []
+def _reasoning_points_with_sources(
+    verdict: str,
+    supportive_rows: List[Dict],
+    contradictory_rows: List[Dict],
+    claim: str = "",
+) -> List[str]:
+    verdict = (verdict or "MISLEADING").upper()
+    if verdict == "TRUE":
+        decision_line = "Decision: TRUE over FALSE because supportive evidence is stronger for this claim."
+    elif verdict == "FALSE":
+        decision_line = "Decision: FALSE over TRUE because contradictory evidence is stronger for this claim."
+    elif verdict == "MISLEADING":
+        decision_line = "Decision: TRUE and FALSE signals are both present, so the claim is MISLEADING."
+    else:
+        decision_line = "Decision: Evidence is not strong enough for TRUE or FALSE, so the claim is UNVERIFIED."
+
+    source_balance_line = (
+        f"Source balance: Defender/supporting sources = {len(supportive_rows)}, "
+        f"Prosecutor/contradictory sources = {len(contradictory_rows)}."
+    )
 
     if contradictory_rows:
         row = contradictory_rows[0]
-        title = (row.get("title") or "a source").strip()
-        link = row.get("link", "")
-        domain = _source_domain(link) or (row.get("source") or "source")
-        lines.append(f"Prosecutor evidence: {title} ({domain}) challenges the claim. Source: {link or 'N/A'}")
+        title = (row.get("title") or "a contradictory source").strip()
+        snippet = _clean_snippet(row.get("snippet", ""))
+        reason = _prosecutor_challenge_reason(claim, row)
+        detail = f" We found this from {title}: {snippet}." if snippet else f" We found this from {title}."
+        prosecutor_line = (
+            "Prosecutor explanation:"
+            f"{detail} This is against the claim because it {reason}."
+        )
+    else:
+        prosecutor_line = "Prosecutor explanation: No strong contradictory source was found in this run."
 
     if supportive_rows:
         row = supportive_rows[0]
-        title = (row.get("title") or "a source").strip()
-        link = row.get("link", "")
-        domain = _source_domain(link) or (row.get("source") or "source")
-        lines.append(f"Defender evidence: {title} ({domain}) supports the claim. Source: {link or 'N/A'}")
+        title = (row.get("title") or "a supporting source").strip()
+        snippet = _clean_snippet(row.get("snippet", ""))
+        reason = _defender_support_reason(row)
+        detail = f" We found this from {title}: {snippet}." if snippet else f" We found this from {title}."
+        defender_line = (
+            "Defender explanation:"
+            f"{detail} This supports the claim because it {reason}."
+        )
+    else:
+        defender_line = "Defender explanation: No strong supporting source was found in this run."
+
+    return [decision_line, source_balance_line, prosecutor_line, defender_line]
+
+
+def _normalize_confidence(
+    verdict: str,
+    raw_confidence: int,
+    supportive_rows: List[Dict],
+    contradictory_rows: List[Dict],
+    disagreement_score: float,
+) -> int:
+    try:
+        base = int(raw_confidence)
+    except Exception:
+        base = 50
+
+    base = max(0, min(100, base))
+    support_count = len(supportive_rows or [])
+    contradict_count = len(contradictory_rows or [])
+    total = max(1, support_count + contradict_count)
+    balance_gap = abs(support_count - contradict_count) / total
+    disagreement = max(0.0, min(1.0, float(disagreement_score or 0.0)))
 
     verdict = (verdict or "MISLEADING").upper()
     if verdict == "MISLEADING":
-        lines.append("Final decision: both supporting and contradictory web sources are present, so the claim is marked MISLEADING.")
+        computed = 48 + min(support_count, contradict_count) * 4 + int(disagreement * 10) - int(balance_gap * 6)
     elif verdict == "FALSE":
-        lines.append("Final decision: contradictory sources are stronger and more consistent than supportive ones.")
+        computed = 62 + contradict_count * 5 - support_count * 2 + int((1.0 - disagreement) * 8)
     elif verdict == "TRUE":
-        lines.append("Final decision: supportive sources are stronger and more consistent than contradictory ones.")
+        computed = 62 + support_count * 5 - contradict_count * 2 + int((1.0 - disagreement) * 8)
     else:
-        lines.append("Final decision: available sources are insufficient for a confident confirmation.")
+        computed = 36 + min(total, 4) * 2 - int((1.0 - disagreement) * 4)
 
-    return lines[:4]
+    if base != 50:
+        computed = int(round((computed * 0.65) + (base * 0.35)))
+
+    return max(35, min(96, int(computed)))
+
+
+def _extend_side_rows(
+    claim: str,
+    side_rows: List[Dict],
+    other_rows: List[Dict],
+    all_rows: List[Dict],
+    side: str,
+    min_count: int = 3,
+) -> List[Dict]:
+    output: List[Dict] = []
+    output_keys: set[str] = set()
+
+    for row in side_rows or []:
+        key = _source_row_key(row)
+        if key in output_keys:
+            continue
+        output.append(row)
+        output_keys.add(key)
+
+    other_keys = {_source_row_key(row) for row in (other_rows or [])}
+    scored: List[tuple[float, float, Dict]] = []
+
+    for row in all_rows or []:
+        key = _source_row_key(row)
+        if key in output_keys:
+            continue
+
+        support_score, contradict_score = _stance_scores(claim, row)
+        margin = (contradict_score - support_score) if side == "prosecutor" else (support_score - contradict_score)
+        total_signal = support_score + contradict_score
+        scored.append((margin, total_signal, row))
+
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+
+    for _, _, row in scored:
+        if len(output) >= min_count:
+            break
+        key = _source_row_key(row)
+        if key in other_keys:
+            continue
+        output.append(row)
+        output_keys.add(key)
+
+    # If unique rows are insufficient, allow overlap instead of returning fewer than min_count.
+    for _, _, row in scored:
+        if len(output) >= min_count:
+            break
+        key = _source_row_key(row)
+        if key in output_keys:
+            continue
+        output.append(row)
+        output_keys.add(key)
+
+    return output[:5]
 
 
 def _augment_points(
@@ -457,19 +705,146 @@ def _augment_points(
     side: str,
     min_points: int = 3,
 ) -> List[str]:
-    """Keep card content balanced by filling missing bullets from available evidence."""
+    """Keep card content balanced without mixing opposite-side evidence."""
     output = list(points or [])
     if len(output) >= min_points:
         return output[:4]
 
-    extras = _fallback_side_points(base_rows, side=side)
-    for item in extras:
-        if len(output) >= min_points:
-            break
-        if item not in output:
-            output.append(item)
+    if not output:
+        extras = _fallback_side_points(base_rows, side=side)
+        for item in extras:
+            if len(output) >= min_points:
+                break
+            if item not in output:
+                output.append(item)
+
+    if len(output) < min_points:
+        filler = (
+            "Additional contradictory signals are limited in this run."
+            if side == "prosecutor"
+            else "Additional supporting signals are limited in this run."
+        )
+        while len(output) < min_points:
+            output.append(filler)
 
     return _clean_points(output)[:4]
+
+
+def _rows_to_side_evidence(rows: List[Dict], max_items: int = 3) -> List[Dict]:
+    output: List[Dict] = []
+    for idx, row in enumerate(rows[:max_items]):
+        link = row.get("link", "")
+        output.append(
+            {
+                "id": idx + 1,
+                "title": row.get("title", ""),
+                "source": row.get("source", "Unknown"),
+                "source_url": link,
+                "content": row.get("snippet", ""),
+                "published_date": row.get("date", ""),
+                "credibility_score": score_source(link),
+                "evidence_source": "hybrid_rag",
+            }
+        )
+    return output
+
+
+def _looks_like_mirrored_sides(payload: Dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+
+    prosecutor_side = payload.get("prosecutor_evidence") or []
+    defender_side = payload.get("defender_evidence") or []
+    if not prosecutor_side or not defender_side:
+        return True
+
+    p_urls = {
+        str(item.get("source_url", "") or "").strip()
+        for item in prosecutor_side
+        if str(item.get("source_url", "") or "").strip()
+    }
+    d_urls = {
+        str(item.get("source_url", "") or "").strip()
+        for item in defender_side
+        if str(item.get("source_url", "") or "").strip()
+    }
+    if p_urls and d_urls and p_urls.intersection(d_urls):
+        return True
+
+    prosecutor_args = {
+        str(arg or "").strip().lower()
+        for arg in (payload.get("prosecutor") or {}).get("arguments", [])
+        if str(arg or "").strip()
+    }
+    defender_args = {
+        str(arg or "").strip().lower()
+        for arg in (payload.get("defender") or {}).get("arguments", [])
+        if str(arg or "").strip()
+    }
+    if prosecutor_args and defender_args and prosecutor_args.intersection(defender_args):
+        return True
+
+    return False
+
+
+def _cache_requires_latest_format(payload: Dict) -> bool:
+    if not isinstance(payload, dict):
+        return False
+
+    banned_phrases = [
+        "does not conclusively establish",
+        "core claim wording",
+        "not directly address",
+    ]
+
+    for side in ["prosecutor", "defender"]:
+        args = ((payload.get(side) or {}).get("arguments") or [])
+        for arg in args:
+            lower = str(arg or "").lower()
+            if any(token in lower for token in banned_phrases):
+                return True
+
+    prosecutor_side = payload.get("prosecutor_evidence") or []
+    defender_side = payload.get("defender_evidence") or []
+    if len(prosecutor_side) < 3 or len(defender_side) < 3:
+        return True
+
+    reasoning_points = payload.get("reasoning_points") or []
+    expected_prefixes = [
+        "Decision:",
+        "Source balance:",
+        "Prosecutor explanation:",
+        "Defender explanation:",
+    ]
+    if len(reasoning_points) != 4:
+        return True
+    for idx, prefix in enumerate(expected_prefixes):
+        text = str(reasoning_points[idx] or "").strip()
+        if not text.startswith(prefix):
+            return True
+
+    return False
+
+
+def _predict_domain(claim: str) -> str:
+    text = (claim or "").lower()
+    
+    if any(k in text for k in ["cricket", "match", "ipl", "rcb", "csk", "kohli", "dhoni", "sport", "football", "tennis", "world cup"]):
+        return "sports"
+    if any(k in text for k in ["election", "modi", "politics", "minister", "govt", "bill", "law", "sc", "bjp", "congress", "vote"]):
+        return "politics"
+    if any(k in text for k in ["war", "china", "russia", "ukraine", "israel", "military", "treaty", "indochina", "border", "army", "navy"]):
+        return "geopolitics"
+    if any(k in text for k in ["economy", "gdp", "market", "ppp", "inflation", "tax", "stock", "sensex"]):
+        return "economy"
+    if any(k in text for k in ["movie", "actor", "actress", "oscar", "box office", "film", "cinema", "song"]):
+        return "entertainment"
+    if any(k in text for k in ["covid", "virus", "vaccine", "disease", "health", "cancer", "hospital"]):
+        return "health"
+    if any(k in text for k in ["phone", "apple", "google", "software", "app", "ai", "artificial intelligence", "tech"]):
+        return "technology"
+    
+    return "general"
 
 
 @app.post("/api/verify")
@@ -534,12 +909,23 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                         has_irrelevant_evidence = True
                         break
 
-            if cache_override:
+            stale_comparison_cache = (
+                _comparison_cache_looks_off(claim, cached_evidence)
+                if isinstance(cached_evidence, list)
+                else False
+            )
+
+            stale_mirrored_cache = _looks_like_mirrored_sides(cached) if isinstance(cached, dict) else False
+            stale_format_cache = _cache_requires_latest_format(cached) if isinstance(cached, dict) else False
+
+            if stale_mirrored_cache or stale_format_cache:
+                cached = None
+            elif cache_override:
                 cached["verdict"] = cache_override["verdict"]
                 cached["confidence"] = cache_override["confidence"]
                 cached["reasoning"] = cache_override["reasoning"]
                 save_cached_result(claim_hash, cached)
-            elif stale_buggy_cache or has_irrelevant_evidence:
+            elif stale_buggy_cache or has_irrelevant_evidence or stale_comparison_cache:
                 cached = None
 
         if cached:
@@ -601,27 +987,26 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         if not filtered:
             filtered = prioritize_trusted(remove_low_quality(relevant))
         if not filtered:
-            filtered = merged[:5]
+            filtered = merged[:8]
 
-        ranked = rank_with_faiss(pipeline_claim, filtered, top_k=5)
-        top_results = ranked[:5] if ranked else filtered[:5]
+        ranked = rank_with_faiss(pipeline_claim, filtered, top_k=8)
+        analysis_pool = ranked[:8] if ranked else filtered[:8]
+        top_results = analysis_pool[:5]
 
-        context = build_context(top_results)
+        context = build_context(analysis_pool)
         try:
-            graph_result = asyncio.run(run_claim_graph(pipeline_claim, context, top_results))
+            graph_result = asyncio.run(run_claim_graph(pipeline_claim, context, analysis_pool))
         except Exception:
             graph_result = {
                 "verdict": "UNVERIFIED",
                 "confidence": 45,
                 "prosecutor_argument": "Retrieved sources contain mixed reliability and challenge parts of the claim.",
                 "defender_argument": "Retrieved sources provide partial support, but not enough to strongly confirm the claim.",
-                "citations": [row.get("link", "") for row in top_results if row.get("link")][:3],
+                "citations": [row.get("link", "") for row in analysis_pool if row.get("link")][:3],
             }
 
         verdict = str(graph_result.get("verdict", "UNVERIFIED")).upper()
         confidence = int(graph_result.get("confidence", 43))
-        if confidence == 50:
-            confidence = 58 if verdict == "MISLEADING" else 43
         prosecutor_argument = graph_result.get("prosecutor_argument", "")
         defender_argument = graph_result.get("defender_argument", "")
         prosecutor_points = _clean_points(graph_result.get("prosecutor_points", []))
@@ -657,17 +1042,33 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
 
         sources = [{"title": row.get("title", ""), "url": row.get("link", "")} for row in top_results]
 
-        supportive_rows, contradictory_rows = _partition_sources_by_stance(claim, top_results, verdict)
+        supportive_rows, contradictory_rows = _partition_sources_by_stance(claim, analysis_pool, verdict)
+        supportive_rows = _extend_side_rows(
+            claim,
+            supportive_rows,
+            contradictory_rows,
+            analysis_pool,
+            side="defender",
+            min_count=3,
+        )
+        contradictory_rows = _extend_side_rows(
+            claim,
+            contradictory_rows,
+            supportive_rows,
+            analysis_pool,
+            side="prosecutor",
+            min_count=3,
+        )
 
-        prosecutor_points = _source_backed_points(contradictory_rows, side="prosecutor")
-        defender_points = _source_backed_points(supportive_rows, side="defender")
+        prosecutor_evidence = _rows_to_side_evidence(contradictory_rows, max_items=3)
+        defender_evidence = _rows_to_side_evidence(supportive_rows, max_items=3)
 
-        # Avoid one-sided sparse cards; fill missing bullets from the current ranked evidence.
-        prosecutor_points = _augment_points(prosecutor_points, top_results, side="prosecutor", min_points=3)
-        defender_points = _augment_points(defender_points, top_results, side="defender", min_points=3)
+        prosecutor_points = _source_backed_points(claim, contradictory_rows, side="prosecutor")
+        defender_points = _source_backed_points(claim, supportive_rows, side="defender")
 
-        prosecutor_strength, defender_strength = _strengths_from_verdict(verdict, confidence)
-        comparison_text = _comparison_reasoning(verdict, prosecutor_strength, defender_strength)
+        # Avoid one-sided sparse cards while keeping each side tied to its own evidence split.
+        prosecutor_points = _augment_points(prosecutor_points, contradictory_rows, side="prosecutor", min_points=3)
+        defender_points = _augment_points(defender_points, supportive_rows, side="defender", min_points=3)
 
         prosecutor_result = {"arguments": prosecutor_points}
         defender_result = {"arguments": defender_points}
@@ -676,7 +1077,26 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             defender_result.get("arguments", []),
         )
 
-        reasoning_points = _reasoning_points_with_sources(verdict, supportive_rows, contradictory_rows)
+        if known_override:
+            confidence = max(int(confidence), int(known_override["confidence"]))
+        else:
+            confidence = _normalize_confidence(
+                verdict,
+                confidence,
+                supportive_rows,
+                contradictory_rows,
+                disagreement_score,
+            )
+
+        prosecutor_strength, defender_strength = _strengths_from_verdict(verdict, confidence)
+        comparison_text = _comparison_reasoning(verdict, prosecutor_strength, defender_strength)
+
+        reasoning_points = _reasoning_points_with_sources(
+            verdict,
+            supportive_rows,
+            contradictory_rows,
+            claim=claim,
+        )
 
         verdict_insights = {
             "supporting_sources": len(supportive_rows),
@@ -705,7 +1125,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         response_payload = {
             "claim": claim,
             "claim_type": "factual_claim",
-            "domain": "general",
+            "domain": _predict_domain(claim),
             "sub_claims": sub_claims,
             "verdict": verdict,
             "confidence": confidence,
@@ -725,6 +1145,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 "strongest_point": defender_points[0] if defender_points else "N/A",
                 "defense_strength": defender_strength,
             },
+            "prosecutor_evidence": prosecutor_evidence,
+            "defender_evidence": defender_evidence,
             "citations": citations,
             "sources": sources,
             "evidence": evidence,
@@ -740,7 +1162,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             claim,
             verdict,
             confidence,
-            "general",
+            _predict_domain(claim),
             user_id=user_id_for_history,
             details=response_payload,
         )
@@ -759,7 +1181,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         fallback = {
             "claim": payload.claim,
             "claim_type": "factual_claim",
-            "domain": "general",
+            "domain": _predict_domain(payload.claim),
             "sub_claims": locals().get("sub_claims", [payload.claim]),
             "verdict": "UNVERIFIED",
             "confidence": 35,
@@ -786,6 +1208,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 "strongest_point": "N/A",
                 "defense_strength": "none",
             },
+            "prosecutor_evidence": [],
+            "defender_evidence": [],
             "citations": [],
             "sources": [],
             "evidence": [],
@@ -804,7 +1228,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 payload.claim,
                 fallback["verdict"],
                 fallback["confidence"],
-                "general",
+                _predict_domain(payload.claim),
                 user_id=locals().get("user_id_for_history"),
                 details=fallback,
             )
@@ -975,12 +1399,33 @@ def export_verdict_pdf(history_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/stats")
-def get_stats(db: Session = Depends(get_db)):
-    total_claims = db.query(func.count(ClaimHistory.id)).scalar() or 0
-    avg_confidence = db.query(func.avg(ClaimHistory.confidence)).scalar() or 0
+def get_stats(request: Request = None, db: Session = Depends(get_db)):
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    user_id = None
+
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        try:
+            payload = verify_token(token)
+            username = payload.get("sub")
+            if username:
+                user = db.query(User).filter(User.username == username).first()
+                if user:
+                    user_id = user.id
+        except Exception:
+            user_id = None
+
+    base_query = db.query(ClaimHistory)
+    scope = "global"
+    if user_id is not None:
+        base_query = base_query.filter(ClaimHistory.user_id == user_id)
+        scope = "user"
+
+    total_claims = base_query.with_entities(func.count(ClaimHistory.id)).scalar() or 0
+    avg_confidence_value = base_query.with_entities(func.avg(ClaimHistory.confidence)).scalar()
 
     verdict_counts = (
-        db.query(ClaimHistory.verdict, func.count(ClaimHistory.id))
+        base_query.with_entities(ClaimHistory.verdict, func.count(ClaimHistory.id))
         .group_by(ClaimHistory.verdict)
         .all()
     )
@@ -988,8 +1433,9 @@ def get_stats(db: Session = Depends(get_db)):
 
     return {
         "total_claims": int(total_claims),
-        "avg_confidence": round(float(avg_confidence), 2),
+        "avg_confidence": round(float(avg_confidence_value), 2) if avg_confidence_value is not None else None,
         "verdicts_breakdown": breakdown,
+        "scope": scope,
     }
 
 
@@ -1073,13 +1519,24 @@ def check_email(email: str, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/register")
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter((User.username == payload.username) | (User.email == payload.email)).first():
+    username = (payload.username or payload.name or "").strip()
+    email = (payload.email or "").strip().lower()
+    password = (payload.password or "").strip()
+
+    if not username:
+        raise HTTPException(status_code=422, detail="Username is required")
+    if not email:
+        raise HTTPException(status_code=422, detail="Email is required")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    if db.query(User).filter((User.username == username) | (User.email == email)).first():
         raise HTTPException(status_code=400, detail="Username or email already exists")
 
     user = User(
-        username=payload.username,
-        email=payload.email,
-        hashed_password=get_password_hash(payload.password),
+        username=username,
+        email=email,
+        hashed_password=get_password_hash(password),
         is_active=True,
     )
     db.add(user)
@@ -1101,9 +1558,19 @@ def register_slash(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/login")
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = authenticate_user(db, payload.username, payload.password)
-    if not user:
+    identifier = (payload.username or payload.email or "").strip()
+    password = (payload.password or "").strip()
+    if not identifier or not password:
+        raise HTTPException(status_code=422, detail="Username/email and password are required")
+
+    user = (
+        db.query(User)
+        .filter((User.username == identifier) | (User.email == identifier.lower()))
+        .first()
+    )
+    if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
     token = create_access_token({"sub": user.username})
     return {
         "access_token": token,
