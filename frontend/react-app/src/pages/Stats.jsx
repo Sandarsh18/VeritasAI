@@ -45,11 +45,13 @@ const cardVariants = {
 };
 
 function Stats() {
-  const [stats, setStats] = useState({ total_claims: 0, avg_confidence: 0, verdicts_breakdown: {} });
+  const [stats, setStats] = useState({ total_claims: 0, avg_confidence: null, verdicts_breakdown: {}, scope: "global" });
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    getStats().then(setStats).catch(() => setStats({ total_claims: 0, avg_confidence: 0, verdicts_breakdown: {} }));
+    getStats()
+      .then((data) => setStats({ total_claims: 0, avg_confidence: null, verdicts_breakdown: {}, scope: "global", ...data }))
+      .catch(() => setStats({ total_claims: 0, avg_confidence: null, verdicts_breakdown: {}, scope: "global" }));
     getHistory().then(setHistory).catch(() => setHistory([]));
   }, []);
 
@@ -172,6 +174,10 @@ function Stats() {
 
   const latestVerdict = history[0]?.verdict || "N/A";
   const highConfidenceCount = history.filter((row) => Number(row.confidence) >= 80).length;
+  const avgConfidenceLabel = stats.avg_confidence == null ? "N/A" : `${Math.round(stats.avg_confidence)}%`;
+  const hasVerdictData = Object.keys(stats.verdicts_breakdown || {}).length > 0;
+  const hasDomainData = Object.keys(domainDistribution || {}).length > 0;
+  const hasTrendData = (history || []).length > 0;
 
   return (
     <motion.div 
@@ -208,7 +214,7 @@ function Stats() {
             animate={{ scale: 1 }} 
             transition={{ type: "spring", delay: 0.4 }}
           >
-            {Math.round(stats.avg_confidence)}%
+            {avgConfidenceLabel}
           </motion.p>
         </motion.div>
 
@@ -231,6 +237,10 @@ function Stats() {
         </motion.div>
       </div>
 
+      <p className="stats-scope-note">
+        {stats.scope === "user" ? "Showing personal stats for this account." : "Showing overall platform stats."}
+      </p>
+
       <motion.div 
         className="card chart-card"
         variants={cardVariants}
@@ -238,7 +248,11 @@ function Stats() {
       >
         <h2>Verdict Distribution</h2>
         <div style={{ width: '100%', height: '320px', position: 'relative' }}>
-          <Bar data={chartData} options={chartOptions} />
+          {hasVerdictData ? (
+            <Bar data={chartData} options={chartOptions} />
+          ) : (
+            <div className="empty-chart-state">No verdict data yet for this account.</div>
+          )}
         </div>
       </motion.div>
 
@@ -246,31 +260,39 @@ function Stats() {
         <motion.div className="card chart-card" variants={cardVariants} whileHover={{ boxShadow: "0 10px 40px rgba(0,0,0,0.15)" }}>
           <h2>Domain Distribution</h2>
           <div style={{ width: '100%', height: '300px', position: 'relative' }}>
-            <Doughnut
-              data={doughnutData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: "bottom" } },
-              }}
-            />
+            {hasDomainData ? (
+              <Doughnut
+                data={doughnutData}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { position: "bottom" } },
+                }}
+              />
+            ) : (
+              <div className="empty-chart-state">No domain distribution data yet.</div>
+            )}
           </div>
         </motion.div>
 
         <motion.div className="card chart-card" variants={cardVariants} whileHover={{ boxShadow: "0 10px 40px rgba(0,0,0,0.15)" }}>
           <h2>Recent Confidence Trend</h2>
           <div style={{ width: '100%', height: '300px', position: 'relative' }}>
-            <Line
-              data={confidenceTrendData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  y: { min: 0, max: 100, ticks: { stepSize: 20 } },
-                },
-              }}
-            />
+            {hasTrendData ? (
+              <Line
+                data={confidenceTrendData}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    y: { min: 0, max: 100, ticks: { stepSize: 20 } },
+                  },
+                }}
+              />
+            ) : (
+              <div className="empty-chart-state">No confidence trend data yet.</div>
+            )}
           </div>
         </motion.div>
       </div>

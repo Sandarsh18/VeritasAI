@@ -1,4 +1,6 @@
 import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const containerVariants = {
   hidden: { opacity: 0, scale: 0.95, y: 30 },
@@ -17,6 +19,48 @@ const itemVariants = {
 };
 
 function Profile({ user, onLogout }) {
+  const navigate = useNavigate();
+  const [notice, setNotice] = useState("");
+  const [prefs, setPrefs] = useState(() => ({
+    emailUpdates: localStorage.getItem("veritas-pref-email-updates") !== "off",
+    saveLocalCache: localStorage.getItem("veritas-pref-save-cache") !== "off",
+  }));
+
+  const cacheCount = useMemo(() => {
+    try {
+      const cache = JSON.parse(localStorage.getItem("veritas-results-cache") || "{}");
+      return Object.keys(cache || {}).length;
+    } catch {
+      return 0;
+    }
+  }, [notice]);
+
+  const joinedAt = useMemo(() => {
+    if (!user?.created_at) return "N/A";
+    const dt = new Date(user.created_at);
+    if (Number.isNaN(dt.getTime())) return "N/A";
+    return dt.toLocaleString();
+  }, [user?.created_at]);
+
+  const tokenPresent = Boolean(localStorage.getItem("veritas-token"));
+
+  const setPreference = (key, value) => {
+    setPrefs((prev) => ({ ...prev, [key]: value }));
+
+    if (key === "emailUpdates") {
+      localStorage.setItem("veritas-pref-email-updates", value ? "on" : "off");
+    }
+    if (key === "saveLocalCache") {
+      localStorage.setItem("veritas-pref-save-cache", value ? "on" : "off");
+    }
+  };
+
+  const clearLocalAnalysisCache = () => {
+    localStorage.removeItem("veritas-results-cache");
+    localStorage.removeItem("veritas-last-claim");
+    setNotice("Local analysis cache cleared.");
+  };
+
   if (!user) return null;
 
   return (
@@ -28,46 +72,89 @@ function Profile({ user, onLogout }) {
       variants={containerVariants}
     >
       <motion.div 
-        className="card profile-card"
+        className="card profile-card profile-enhanced-card"
         whileHover={{ boxShadow: "0 10px 40px rgba(0,0,0,0.15)" }}
       >
-        <motion.h2 variants={itemVariants}>User Profile</motion.h2>
-
-        <div className="profile-grid">
-          <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.05 }}>
-            <label>Username</label>
-            <p>{user.username}</p>
-          </motion.div>
-          
-          <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.05 }}>
-            <label>Email Address</label>
-            <p>{user.email}</p>
-          </motion.div>
-
-          <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.05 }}>
-            <label>Account Status</label>
-            <p style={{ color: user.is_active ? 'var(--true)' : 'var(--false)' }}>
-              {user.is_active ? 'Active' : 'Inactive'}
-            </p>
-          </motion.div>
-
-          <motion.div className="card" variants={itemVariants} whileHover={{ scale: 1.05 }}>
-            <label>Verification Standard</label>
-            <p>Verified ✔</p>
-          </motion.div>
-        </div>
-
-        <motion.div variants={itemVariants} style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-          <motion.button 
-            className="primary-btn" 
-            onClick={onLogout} 
-            style={{ backgroundColor: 'var(--false)' }}
-            whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Logout
-          </motion.button>
+        <motion.div variants={itemVariants} className="profile-top-row">
+          <div>
+            <h2>User Profile</h2>
+            <p className="profile-subtitle">Manage your essential account settings and security.</p>
+          </div>
+          <span className={`profile-status-pill ${user.is_active ? "active" : "inactive"}`}>
+            {user.is_active ? "Active" : "Inactive"}
+          </span>
         </motion.div>
+
+        {notice && <p className="profile-notice">{notice}</p>}
+
+        <div className="profile-sections-grid">
+          <motion.section className="card profile-section-card" variants={itemVariants} whileHover={{ scale: 1.01 }}>
+            <h3>Account Overview</h3>
+            <div className="profile-kv-grid">
+              <div>
+                <label>Username</label>
+                <p>{user.username}</p>
+              </div>
+              <div>
+                <label>Email</label>
+                <p>{user.email}</p>
+              </div>
+              <div>
+                <label>Joined</label>
+                <p>{joinedAt}</p>
+              </div>
+            </div>
+            <div className="profile-actions-row">
+              <button className="secondary-btn" onClick={() => navigate("/")}>Go To Home</button>
+            </div>
+          </motion.section>
+
+          <motion.section className="card profile-section-card" variants={itemVariants} whileHover={{ scale: 1.01 }}>
+            <h3>Essential Preferences</h3>
+            <label className="profile-toggle-row">
+              <span>Email updates</span>
+              <input
+                type="checkbox"
+                checked={prefs.emailUpdates}
+                onChange={(e) => setPreference("emailUpdates", e.target.checked)}
+              />
+            </label>
+            <label className="profile-toggle-row">
+              <span>Save local analysis cache</span>
+              <input
+                type="checkbox"
+                checked={prefs.saveLocalCache}
+                onChange={(e) => setPreference("saveLocalCache", e.target.checked)}
+              />
+            </label>
+            <div className="profile-kv-grid single-col">
+              <div>
+                <label>Local Saved Claims</label>
+                <p>{cacheCount}</p>
+              </div>
+            </div>
+            <div className="profile-actions-row">
+              <button className="secondary-btn" onClick={clearLocalAnalysisCache}>Clear Local Cache</button>
+            </div>
+          </motion.section>
+
+          <motion.section className="card profile-section-card profile-wide-section" variants={itemVariants} whileHover={{ scale: 1.01 }}>
+            <h3>Security And Session</h3>
+            <div className="profile-kv-grid single-col">
+              <div>
+                <label>Session Token</label>
+                <p>{tokenPresent ? "Present" : "Missing"}</p>
+              </div>
+              <div>
+                <label>Account Verification</label>
+                <p>Verified</p>
+              </div>
+            </div>
+            <div className="profile-actions-row">
+              <button className="primary-btn profile-danger-btn" onClick={onLogout}>Logout</button>
+            </div>
+          </motion.section>
+        </div>
       </motion.div>
     </motion.div>
   );

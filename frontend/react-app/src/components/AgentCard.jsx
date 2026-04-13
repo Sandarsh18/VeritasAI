@@ -3,12 +3,34 @@ import { motion } from "framer-motion";
 function AgentCard({ role, result, evidence = [] }) {
   const strength = result?.prosecution_strength || result?.defense_strength || "none";
 
-  const sourceLinks = (evidence || [])
-    .filter((item) => item?.source_url)
-    .map((item) => ({
+  const parseArgument = (arg) => {
+    const text = String(arg || "").trim();
+    const marker = "| Justification:";
+    if (!text.includes(marker)) return null;
+
+    const [left, right] = text.split(marker);
+    if (!left || !right || !left.trim().toLowerCase().startsWith("source title:")) {
+      return null;
+    }
+
+    return {
+      sourceTitle: left.replace(/^source title:\s*/i, "").trim(),
+      justification: right.trim(),
+    };
+  };
+
+  const seenUrls = new Set();
+  const sourceLinks = [];
+  for (const item of evidence || []) {
+    const url = item?.source_url;
+    if (!url || seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    sourceLinks.push({
       title: item?.title || item?.source || "Source",
-      url: item?.source_url,
-    }));
+      url,
+    });
+    if (sourceLinks.length >= 5) break;
+  }
 
   return (
     <motion.div
@@ -41,16 +63,26 @@ function AgentCard({ role, result, evidence = [] }) {
       </div>
 
       <ul className="bullet-list">
-        {(result?.arguments || []).map((arg, idx) => (
-          <motion.li 
-            key={`${role}-arg-${idx}`}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 + (idx * 0.1) }}
-          >
-            {arg}
-          </motion.li>
-        ))}
+        {(result?.arguments || []).map((arg, idx) => {
+          const parsed = parseArgument(arg);
+          return (
+            <motion.li 
+              key={`${role}-arg-${idx}`}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 + (idx * 0.1) }}
+            >
+              {parsed ? (
+                <>
+                  <span className="agent-arg-source-title">{parsed.sourceTitle}</span>
+                  <span>{parsed.justification}</span>
+                </>
+              ) : (
+                arg
+              )}
+            </motion.li>
+          );
+        })}
       </ul>
 
       <motion.div 

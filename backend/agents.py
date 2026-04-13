@@ -1,185 +1,161 @@
-import re
-import os
-from urllib.parse import urlparse
-from typing import Dict, List, TypedDict
 import asyncio
-import time
+import logging
+import os
+import re
+import sys
+from typing import Dict, List, TypedDict
 
 try:
-    from langgraph.graph import END, StateGraph
+    from langgraph.graph import StateGraph
 except Exception:
-    END = None
     StateGraph = None
 
-USE_GEMINI = os.getenv("USE_GEMINI", "false").strip().lower() == "true"
+AGENTS_DIR = os.path.join(os.path.dirname(__file__), "agents")
+if AGENTS_DIR not in sys.path:
+    sys.path.append(AGENTS_DIR)
 
-if USE_GEMINI:
-    try:
-        from gemini_client import gemini_complete
-    except Exception:
-        gemini_complete = None
-else:
-    gemini_complete = None
+from claim_analyzer import analyze_claim
+from defender import run_defender
+from judge import run_judge
+from prosecutor import run_prosecutor
+from rag.retriever import retrieve_evidence
 
 # Compatibility bridge: allow imports like `from agents.judge import run_judge`
 # while keeping this file as the runtime module used by main.py.
-__path__ = [os.path.join(os.path.dirname(__file__), "agents")]
+__path__ = [AGENTS_DIR]
+
+LOGGER = logging.getLogger("veritas.graph")
 
 
 class ClaimState(TypedDict, total=False):
     claim: str
     context: str
-    sources: List[Dict]
+    analysis: Dict
+    evidence: List[Dict]
+    retrieval_meta: Dict
+    prosecutor: Dict
+    defender: Dict
+    judge: Dict
     prosecutor_argument: str
     defender_argument: str
-    verdict: str
-    confidence: int
-    citations: List[str]
     prosecutor_points: List[str]
     defender_points: List[str]
     prosecutor_strength: str
     defender_strength: str
+    verdict: str
+    confidence: int
+    reasoning: str
+    summary: str
+    citations: List[str]
+    disagreement_score: float
 
 
-def _source_lines(sources: List[Dict]) -> str:
-    lines = []
-    for item in sources or []:
-        title = item.get("title", "")
-        link = item.get("link", "")
-        lines.append(f"- {title} ({link})")
-    return "\n".join(lines)
+def _clean_points(points: List[str]) -> List[str]:
+    cleaned = []
+    for point in points or []:
+        value = str(point or "").strip()
+        if value:
+            cleaned.append(value)
+    return cleaned
 
 
-def _domain(url: str) -> str:
-    try:
-        netloc = urlparse(url or "").netloc.lower()
-        return netloc.replace("www.", "")
-    except Exception:
-        return ""
-
-
-def _clean_snippet(text: str) -> str:
-    value = (text or "").strip()
-    value = re.sub(r"\s+", " ", value)
-    return value[:180]
-
-
-def _fallback_points(sources: List[Dict], side: str) -> List[str]:
-    points: List[str] = []
-    for item in sources[:3]:
-        title = (item.get("title") or "Untitled source").strip()
-        snippet = _clean_snippet(item.get("snippet", ""))
-        link = item.get("link", "")
-        source_domain = _domain(link) or (item.get("source") or "source")
-        lead = "supports" if side == "defender" else "challenges"
-        statement = (
-            f"{source_domain} {lead} parts of the claim via '{title}'."
-            if not snippet
-            else f"{source_domain} {lead} parts of the claim: {snippet}"
-        )
-        if link:
-            statement = f"{statement} (Source: {link})"
-        points.append(statement)
-
-    if not points:
-        points.append("No high-quality sources were retrieved for this side.")
-    return points
-
-
-def _extract_points(raw_text: str) -> List[str]:
-    text = (raw_text or "").strip()
-    if not text:
-        return []
-
-    lines = []
-    for chunk in re.split(r"\n+|•|- ", text):
-        cleaned = chunk.strip(" \t-•")
-        if cleaned:
-            lines.append(cleaned)
-
-    if not lines and text:
-        lines = [text]
-    return lines[:4]
-
-
-def _sources_to_agent_evidence(sources: List[Dict]) -> List[Dict]:
-    evidence: List[Dict] = []
+def _normalize_sources(sources: List[Dict]) -> List[Dict]:
+    normalized = []
     for row in sources or []:
-        link = row.get("link", "")
-        domain = (_domain(link) or row.get("source") or "unknown").lower()
-        trusted_tokens = ["reuters.com", "bbc.com", "who.int", "thehindu.com", "ndtv.com"]
-        credibility = 0.9 if any(token in domain for token in trusted_tokens) else 0.7
-        evidence.append(
+        url = row.get("url") or row.get("source_url") or row.get("link") or ""
+        normalized.append(
             {
                 "title": row.get("title", ""),
-                "source": row.get("source", _domain(link)),
-                "source_url": link,
-                "content": row.get("snippet", ""),
-                "credibility_score": credibility,
+                "source": row.get("source", "Unknown"),
+                "content": row.get("content") or row.get("snippet") or "",
+                "url": url,
+                "source_url": url,
+                "published_date": row.get("published_date") or row.get("date") or "",
+                "credibility_score": float(row.get("credibility_score", 0.5) or 0.5),
+                "evidence_source": row.get("evidence_source", "api"),
             }
         )
-    return evidence
+    return normalized
 
 
-async def call_llm_async(prompt: str) -> str:
-    """Optional async wrapper for Gemini completion when enabled."""
-    if not USE_GEMINI or not gemini_complete:
-        return ""
-    try:
-        return await asyncio.to_thread(gemini_complete, prompt)
-    except Exception:
-        return ""
+def _citation_urls(evidence: List[Dict]) -> List[str]:
+    urls: List[str] = []
+    seen = set()
+    for row in evidence or []:
+        url = (row.get("url") or row.get("source_url") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls[:3]
 
 
-async def decompose_claim(claim: str) -> list:
-    """Split a compound claim into up to 3 sub-claims using LLM."""
-    prompt = f"""Split this claim into individual factual sub-claims (max 3).
-Return ONLY a JSON array of strings. No explanation.
-If it is a single claim, return a single-element array.
-Claim: {claim}
-Example output: [\"sub-claim 1\", \"sub-claim 2\"]"""
-    try:
-        response = await call_llm_async(prompt)
-        import json, re
-        match = re.search(r'\[.*?\]', response, re.DOTALL)
-        if match:
-            result = json.loads(match.group())
-            return [c.strip() for c in result if c.strip()][:3]
-    except Exception:
-        pass
-    return [claim]
+def _analyzer_node(state: ClaimState) -> ClaimState:
+    claim = (state.get("claim") or "").strip()
+    analysis = analyze_claim(claim)
+    LOGGER.info("[Graph] Analyzer claim_type=%s domain=%s", analysis.get("claim_type"), analysis.get("domain"))
+    return {"analysis": analysis}
 
 
-async def _prosecutor_node_async(state: ClaimState) -> ClaimState:
-    """Async version of prosecutor node."""
-    return _prosecutor_node(state)
+def _retriever_node(state: ClaimState) -> ClaimState:
+    claim = state.get("claim", "")
+    analysis = state.get("analysis", {})
 
+    if state.get("evidence"):
+        LOGGER.info("[Graph] Retriever using preloaded evidence count=%s", len(state.get("evidence", [])))
+        return {"evidence": state.get("evidence", []), "retrieval_meta": {"preloaded": True}}
 
-async def _defender_node_async(state: ClaimState) -> ClaimState:
-    """Async version of defender node."""
-    return _defender_node(state)
+    keywords = analysis.get("key_keywords") or []
+    domain = analysis.get("domain") or "general"
+
+    evidence, meta = retrieve_evidence(
+        claim=claim,
+        keywords=keywords,
+        domain=domain,
+        top_k=5,
+        max_retries=1,
+    )
+
+    if not evidence:
+        # Mandatory retry when first pass fails.
+        evidence, retry_meta = retrieve_evidence(
+            claim=claim,
+            keywords=keywords,
+            domain=domain,
+            top_k=5,
+            max_retries=2,
+        )
+        meta = {
+            "primary": meta,
+            "retry": retry_meta,
+        }
+
+    LOGGER.info("[Graph] Retriever evidence_count=%s", len(evidence))
+    return {
+        "evidence": evidence,
+        "retrieval_meta": meta,
+    }
 
 
 def _prosecutor_node(state: ClaimState) -> ClaimState:
-    fallback_points = _fallback_points(state.get("sources", []), side="prosecutor")
-    strength = "none"
-    try:
-        from agents.prosecutor import run_prosecutor
+    claim = state.get("claim", "")
+    evidence = state.get("evidence", [])
+    result = run_prosecutor(claim, evidence)
+    points = _clean_points(result.get("arguments", []))
 
-        evidence = _sources_to_agent_evidence(state.get("sources", []))
-        result = run_prosecutor(state.get("claim", ""), evidence)
-        points = [p for p in (result.get("arguments") or []) if p]
-        if not points:
-            points = fallback_points
-        strength = str(result.get("prosecution_strength", "none")).lower().strip()
-    except Exception:
-        points = fallback_points
-        strength = "moderate" if len(points) >= 2 else "weak"
+    if not points:
+        points = ["No specific contradicting evidence found in retrieved sources."]
 
+    strength = str(result.get("prosecution_strength", "none") or "none").lower()
     if strength not in {"strong", "moderate", "weak", "none"}:
-        strength = "moderate" if len(points) >= 3 else "weak" if len(points) >= 1 else "none"
+        strength = "weak" if points else "none"
 
     return {
+        "prosecutor": {
+            **result,
+            "arguments": points,
+            "prosecution_strength": strength,
+        },
         "prosecutor_argument": points[0],
         "prosecutor_points": points,
         "prosecutor_strength": strength,
@@ -187,25 +163,24 @@ def _prosecutor_node(state: ClaimState) -> ClaimState:
 
 
 def _defender_node(state: ClaimState) -> ClaimState:
-    fallback_points = _fallback_points(state.get("sources", []), side="defender")
-    strength = "none"
-    try:
-        from agents.defender import run_defender
+    claim = state.get("claim", "")
+    evidence = state.get("evidence", [])
+    result = run_defender(claim, evidence)
+    points = _clean_points(result.get("arguments", []))
 
-        evidence = _sources_to_agent_evidence(state.get("sources", []))
-        result = run_defender(state.get("claim", ""), evidence)
-        points = [p for p in (result.get("arguments") or []) if p]
-        if not points:
-            points = fallback_points
-        strength = str(result.get("defense_strength", "none")).lower().strip()
-    except Exception:
-        points = fallback_points
-        strength = "moderate" if len(points) >= 2 else "weak"
+    if not points:
+        points = ["No specific supporting evidence found in retrieved sources."]
 
+    strength = str(result.get("defense_strength", "none") or "none").lower()
     if strength not in {"strong", "moderate", "weak", "none"}:
-        strength = "moderate" if len(points) >= 3 else "weak" if len(points) >= 1 else "none"
+        strength = "weak" if points else "none"
 
     return {
+        "defender": {
+            **result,
+            "arguments": points,
+            "defense_strength": strength,
+        },
         "defender_argument": points[0],
         "defender_points": points,
         "defender_strength": strength,
@@ -214,121 +189,71 @@ def _defender_node(state: ClaimState) -> ClaimState:
 
 def _judge_node(state: ClaimState) -> ClaimState:
     claim = state.get("claim", "")
-    sources = state.get("sources", []) or []
-
-    prosecutor_points = state.get("prosecutor_points") or _extract_points(
-        state.get("prosecutor_argument", "")
-    )
-    defender_points = state.get("defender_points") or _extract_points(
-        state.get("defender_argument", "")
-    )
-
-    prosecutor_payload = {
-        "arguments": prosecutor_points,
+    prosecutor = state.get("prosecutor") or {
+        "arguments": state.get("prosecutor_points", []),
         "prosecution_strength": state.get("prosecutor_strength", "none"),
     }
-    defender_payload = {
-        "arguments": defender_points,
+    defender = state.get("defender") or {
+        "arguments": state.get("defender_points", []),
         "defense_strength": state.get("defender_strength", "none"),
     }
+    evidence = state.get("evidence", [])
 
-    evidence = []
-    for row in sources[:8]:
-        evidence.append(
-            {
-                "title": row.get("title", ""),
-                "source": row.get("source", _domain(row.get("link", ""))),
-                "source_url": row.get("link", ""),
-                "content": row.get("snippet", ""),
-                "credibility_score": 0.9 if any(
-                    token in (row.get("link", "").lower())
-                    for token in ["reuters.com", "bbc.com", "who.int", "thehindu.com", "ndtv.com"]
-                ) else 0.7,
-            }
-        )
-
-    result = {}
-    try:
-        from agents.judge import run_judge
-
-        result = run_judge(
-            claim=claim,
-            prosecutor=prosecutor_payload,
-            defender=defender_payload,
-            evidence=evidence,
-        )
-    except Exception as exc:
-        print(f"[GraphJudge] run_judge import/call failed: {exc}")
-        result = {
-            "verdict": "UNVERIFIED",
-            "confidence": 43,
-            "reasoning": "Judge model unavailable, using conservative fallback verdict.",
-            "key_evidence": [],
-            "prosecutor_strength": prosecutor_payload.get("prosecution_strength", "none"),
-            "defender_strength": defender_payload.get("defense_strength", "none"),
-            "recommendation": "Check trusted sources for confirmation.",
-        }
-
+    result = run_judge(claim, prosecutor, defender, evidence)
     verdict = str(result.get("verdict", "UNVERIFIED")).upper()
-    if verdict not in {"TRUE", "FALSE", "MISLEADING", "UNVERIFIED"}:
-        verdict = "UNVERIFIED"
 
-    confidence = result.get("confidence", 43)
     try:
-        confidence = int(confidence)
+        confidence = int(float(result.get("confidence", 43)))
     except Exception:
         confidence = 43
-    if confidence == 50:
-        confidence = 58 if verdict == "MISLEADING" else 43
-    confidence = max(36, min(97, confidence))
 
-    citations = [
-        item.get("link", "")
-        for item in sources
-        if item.get("link")
-    ][:3]
+    confidence = max(36, min(95, 63 if confidence == 50 else confidence))
+    reasoning = str(result.get("reasoning", "")).strip() or "Insufficient evidence for a definitive verdict."
 
     return {
+        "judge": result,
         "verdict": verdict,
         "confidence": confidence,
-        "citations": citations,
-        "summary": result.get("reasoning", ""),
-        "prosecutor_strength": result.get(
-            "prosecutor_strength",
-            prosecutor_payload.get("prosecution_strength", "none"),
-        ),
-        "defender_strength": result.get(
-            "defender_strength",
-            defender_payload.get("defense_strength", "none"),
-        ),
+        "reasoning": reasoning,
+        "summary": reasoning,
+        "citations": _citation_urls(evidence),
     }
 
 
-def _calculate_disagreement(state: ClaimState) -> Dict[str, float]:
-    """
-    Calculates a disagreement score based on the arguments of the prosecutor and defender.
-    Score is 0-1, where 1 is high disagreement.
-    """
-    prosecutor_points = state.get("prosecutor_points", [])
-    defender_points = state.get("defender_points", [])
-    
-    p_len = len(prosecutor_points)
-    d_len = len(defender_points)
-    
-    if p_len == 0 and d_len == 0:
-        return {"disagreement_score": 0.0}
-        
-    # Normalize lengths to be between 0 and 1 (assuming max 4 points)
-    p_norm = p_len / 4.0
-    d_norm = d_len / 4.0
-    
-    # Disagreement is high if both are strong, low if one is weak.
-    # Using a formula that rewards two high scores.
-    # (p_norm * d_norm) gives a good sense of mutual engagement.
-    # The additional term boosts the score if they are balanced.
-    disagreement = (p_norm * d_norm) + (1.0 - abs(p_norm - d_norm)) / 4.0
-    
-    return {"disagreement_score": min(1.0, disagreement)}
+def _build_langgraph():
+    if StateGraph is None:
+        LOGGER.warning("[Graph] LangGraph unavailable, using sequential fallback")
+        return None
+
+    graph = StateGraph(ClaimState)
+    graph.add_node("claim_analyzer_node", _analyzer_node)
+    graph.add_node("retriever_node", _retriever_node)
+    graph.add_node("prosecutor_node", _prosecutor_node)
+    graph.add_node("defender_node", _defender_node)
+    graph.add_node("judge_node", _judge_node)
+
+    graph.set_entry_point("claim_analyzer_node")
+    graph.add_edge("claim_analyzer_node", "retriever_node")
+    graph.add_edge("retriever_node", "prosecutor_node")
+    graph.add_edge("retriever_node", "defender_node")
+    graph.add_edge("prosecutor_node", "judge_node")
+    graph.add_edge("defender_node", "judge_node")
+    graph.set_finish_point("judge_node")
+
+    return graph.compile()
+
+
+_GRAPH = _build_langgraph()
+
+
+def _run_sequential(state: ClaimState) -> ClaimState:
+    merged: ClaimState = dict(state)
+    merged.update(_analyzer_node(merged))
+    merged.update(_retriever_node(merged))
+    merged.update(_prosecutor_node(merged))
+    merged.update(_defender_node(merged))
+    merged.update(_judge_node(merged))
+    return merged
 
 
 def calculate_disagreement_score(prosecutor_args: list, defender_args: list) -> float:
@@ -342,47 +267,39 @@ def calculate_disagreement_score(prosecutor_args: list, defender_args: list) -> 
     return round(min(balance * volume, 1.0), 2)
 
 
-async def _run_parallel(state: ClaimState) -> ClaimState:
-    """Runs prosecutor and defender in parallel, then the judge."""
-    start_time = time.monotonic()
+async def decompose_claim(claim: str) -> list:
+    """Lightweight decomposition used by main.py compatibility path."""
+    text = (claim or "").strip()
+    if not text:
+        return []
 
-    prosecutor_task = _prosecutor_node_async(state)
-    defender_task = _defender_node_async(state)
-
-    results = await asyncio.gather(prosecutor_task, defender_task)
-
-    merged_state: ClaimState = dict(state)
-    for result in results:
-        merged_state.update(result)
-
-    judge_result = _judge_node(merged_state)
-    merged_state.update(judge_result)
-    
-    disagreement_result = _calculate_disagreement(merged_state)
-    merged_state.update(disagreement_result)
-
-    end_time = time.monotonic()
-    print(f"Async agent execution time: {end_time - start_time:.2f} seconds")
-
-    return merged_state
+    parts = [
+        p.strip(" ,.;")
+        for p in re.split(r"\band\b|\bbut\b|\bwhile\b", text, flags=re.IGNORECASE)
+        if p.strip(" ,.;")
+    ]
+    return parts[:3] if parts else [text]
 
 
-def _run_sequential(state: ClaimState) -> ClaimState:
-    merged: ClaimState = dict(state)
-    merged.update(_prosecutor_node(merged))
-    merged.update(_defender_node(merged))
-    merged.update(_judge_node(merged))
-    disagreement_result = _calculate_disagreement(merged)
-    merged.update(disagreement_result)
-    return merged
-
-
-async def run_claim_graph(claim: str, context: str, sources: List[Dict]) -> ClaimState:
+async def run_claim_graph(claim: str, context: str = "", sources: List[Dict] | None = None) -> ClaimState:
     state: ClaimState = {
         "claim": claim,
         "context": context,
-        "sources": sources,
     }
 
-    # Always use parallel execution for this enhancement
-    return await _run_parallel(state)
+    if sources:
+        state["evidence"] = _normalize_sources(sources)
+
+    if _GRAPH is not None:
+        result: ClaimState = await asyncio.to_thread(_GRAPH.invoke, state)
+    else:
+        result = _run_sequential(state)
+
+    prosecutor_args = (result.get("prosecutor") or {}).get("arguments") or result.get("prosecutor_points", [])
+    defender_args = (result.get("defender") or {}).get("arguments") or result.get("defender_points", [])
+    result["disagreement_score"] = calculate_disagreement_score(prosecutor_args, defender_args)
+
+    if not result.get("citations"):
+        result["citations"] = _citation_urls(result.get("evidence", []))
+
+    return result

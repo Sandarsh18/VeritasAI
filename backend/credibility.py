@@ -9,7 +9,11 @@ DOMAIN_TRUST = {
     "who.int": 0.95, "cdc.gov": 0.95, "nih.gov": 0.95,
     "snopes.com": 0.85, "factcheck.org": 0.88, "politifact.com": 0.85,
     "thehindu.com": 0.82, "ndtv.com": 0.78, "timesofindia.com": 0.78,
-    "aljazeera.com": 0.82, "bloomberg.com": 0.88
+    "aljazeera.com": 0.82, "bloomberg.com": 0.88,
+    "espncricinfo.com": 0.88, "cricbuzz.com": 0.86,
+    "iplt20.com": 0.92, "icc-cricket.com": 0.92,
+    "sportstar.thehindu.com": 0.86, "wisden.com": 0.84,
+    "mykhel.com": 0.72, "crictracker.com": 0.72
 }
 
 from urllib.parse import urlparse

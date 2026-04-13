@@ -265,6 +265,29 @@ def _clean_points(points: List[str]) -> List[str]:
     return cleaned
 
 
+def _points_need_source_fallback(points: List[str]) -> bool:
+    if not points:
+        return True
+
+    placeholder_markers = [
+        "no specific",
+        "no reliable sources",
+        "analysis could not be completed",
+        "insufficient evidence",
+    ]
+
+    meaningful_points = 0
+    for point in points[:3]:
+        text = str(point or "").strip().lower()
+        if not text:
+            continue
+        if any(marker in text for marker in placeholder_markers):
+            continue
+        meaningful_points += 1
+
+    return meaningful_points == 0
+
+
 def _is_comparison_claim(claim: str) -> bool:
     lower = (claim or "").lower()
     cues = [
@@ -849,17 +872,19 @@ def _predict_domain(claim: str) -> str:
 
 @app.post("/api/verify")
 def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(get_db)):
-    import time as time_module
     import hashlib
+    import time as time_module
 
     start = time_module.time()
+    sub_claims = [payload.claim]
+    user_id_for_history = None
+    claim_hash = None
 
     try:
         claim = payload.claim.strip()
         if not claim:
             raise HTTPException(status_code=400, detail="Claim is required")
 
-        user_id_for_history = None
         auth_header = request.headers.get("Authorization", "") if request else ""
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ", 1)[1].strip()
@@ -873,60 +898,36 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             except Exception:
                 user_id_for_history = None
 
+        sub_claims = [claim]
         claim_hash = hashlib.sha256(claim.strip().lower().encode()).hexdigest()
         cached = get_cached_result(claim_hash)
-        if cached:
-            cached_verdict = str(cached.get("verdict", "UNVERIFIED")).upper()
-            try:
-                cached_confidence = int(float(cached.get("confidence", 0)))
-            except Exception:
-                cached_confidence = 0
+        if isinstance(cached, dict):
+            stale_mirrored_cache = _looks_like_mirrored_sides(cached)
+            stale_format_cache = _cache_requires_latest_format(cached)
+            stale_empty_evidence_cache = not isinstance(cached.get("evidence"), list) or len(cached.get("evidence", [])) == 0
+            is_graph_cache = isinstance(cached.get("retrieval_meta"), dict)
 
-            cache_override = _known_fact_override(
-                claim,
-                cached_verdict,
-                cached_confidence,
-            )
+            # New graph responses can have partial source overlap by design.
+            if stale_mirrored_cache and is_graph_cache:
+                stale_mirrored_cache = False
 
-            stale_buggy_cache = (
-                cached_verdict == "MISLEADING"
-                and cached_confidence == 50
-            )
-
-            cached_evidence = cached.get("evidence") if isinstance(cached, dict) else []
-            has_irrelevant_evidence = False
-            if isinstance(cached_evidence, list) and cached_evidence:
-                for item in cached_evidence[:5]:
-                    rel = calculate_relevance(
-                        claim,
-                        {
-                            "title": item.get("title", ""),
-                            "snippet": item.get("content", ""),
-                            "content": item.get("content", ""),
-                        },
-                    )
-                    if rel < 0.15:
-                        has_irrelevant_evidence = True
-                        break
-
-            stale_comparison_cache = (
-                _comparison_cache_looks_off(claim, cached_evidence)
-                if isinstance(cached_evidence, list)
-                else False
-            )
-
-            stale_mirrored_cache = _looks_like_mirrored_sides(cached) if isinstance(cached, dict) else False
-            stale_format_cache = _cache_requires_latest_format(cached) if isinstance(cached, dict) else False
-
-            if stale_mirrored_cache or stale_format_cache:
+            if stale_mirrored_cache or stale_format_cache or stale_empty_evidence_cache:
                 cached = None
-            elif cache_override:
-                cached["verdict"] = cache_override["verdict"]
-                cached["confidence"] = cache_override["confidence"]
-                cached["reasoning"] = cache_override["reasoning"]
-                save_cached_result(claim_hash, cached)
-            elif stale_buggy_cache or has_irrelevant_evidence or stale_comparison_cache:
-                cached = None
+            else:
+                cached_verdict = str(cached.get("verdict", "UNVERIFIED")).upper()
+                try:
+                    cached_confidence = int(float(cached.get("confidence", 0)))
+                except Exception:
+                    cached_confidence = 0
+
+                cache_override = _known_fact_override(claim, cached_verdict, cached_confidence)
+                if cache_override:
+                    cached["verdict"] = cache_override["verdict"]
+                    cached["confidence"] = cache_override["confidence"]
+                    cached["reasoning"] = cache_override["reasoning"]
+                    save_cached_result(claim_hash, cached)
+        else:
+            cached = None
 
         if cached:
             if not isinstance(cached.get("disagreement_score"), (int, float)):
@@ -960,6 +961,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 except Exception:
                     pass
 
+            cached["cached"] = True
             cached["cache_hit"] = True
             return cached
 
@@ -968,79 +970,147 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             sub_claims = [claim]
         pipeline_claim = sub_claims[0]
 
-        serp = search_serpapi(pipeline_claim)
-        news = search_newsapi(pipeline_claim)
-        merged = merge_results(serp, news)
+        graph_result = asyncio.run(run_claim_graph(pipeline_claim))
+        evidence_rows = list(graph_result.get("evidence") or [])
 
-        relevant = filter_relevant_results(
-            pipeline_claim,
-            merged,
-            min_relevance=0.15,
-        )
-        if not relevant:
-            relevant = merged
+        if not evidence_rows and pipeline_claim.strip().lower() != claim.strip().lower():
+            logger.warning("[Verify] No evidence for decomposed claim; retrying full claim")
+            retry_result = asyncio.run(run_claim_graph(claim))
+            retry_rows = list(retry_result.get("evidence") or [])
+            if retry_rows:
+                graph_result = retry_result
+                evidence_rows = retry_rows
 
-        filtered = remove_self_source(relevant, pipeline_claim)
-        filtered = remove_low_quality(filtered)
-        filtered = prioritize_trusted(filtered)
+        retrieval_meta = graph_result.get("retrieval_meta", {})
+        fallback_used = False
+        if isinstance(retrieval_meta, dict):
+            fallback_used = bool(retrieval_meta.get("fallback_used"))
+            if not fallback_used:
+                primary_meta = retrieval_meta.get("primary") if isinstance(retrieval_meta.get("primary"), dict) else {}
+                retry_meta = retrieval_meta.get("retry") if isinstance(retrieval_meta.get("retry"), dict) else {}
+                fallback_used = bool(primary_meta.get("fallback_used")) or bool(retry_meta.get("fallback_used"))
 
-        if not filtered:
-            filtered = prioritize_trusted(remove_low_quality(relevant))
-        if not filtered:
-            filtered = merged[:8]
+        analysis_pool = []
+        for row in evidence_rows:
+            url = str(row.get("url") or row.get("source_url") or row.get("link") or "").strip()
+            title = str(row.get("title", "")).strip()
+            snippet = str(row.get("content") or row.get("snippet") or "").strip()
+            source = str(row.get("source") or _source_domain(url) or "Unknown").strip()
+            published_date = str(row.get("published_date") or row.get("date") or "").strip()
+            try:
+                credibility = float(row.get("credibility_score", score_source(url)))
+            except Exception:
+                credibility = float(score_source(url))
+            try:
+                rag_score = float(row.get("rag_score", row.get("similarity", 0.0)))
+            except Exception:
+                rag_score = 0.0
 
-        ranked = rank_with_faiss(pipeline_claim, filtered, top_k=8)
-        analysis_pool = ranked[:8] if ranked else filtered[:8]
+            analysis_pool.append(
+                {
+                    "title": title,
+                    "source": source,
+                    "link": url,
+                    "snippet": snippet,
+                    "date": published_date,
+                    "credibility_score": credibility,
+                    "rag_score": rag_score,
+                }
+            )
+
+        if not analysis_pool:
+            logger.warning("[Verify] Graph retriever returned no evidence; using legacy API fallback")
+            serp = search_serpapi(pipeline_claim)
+            news = search_newsapi(pipeline_claim)
+            merged = merge_results(serp, news)
+            relevant = filter_relevant_results(pipeline_claim, merged, min_relevance=0.15) or merged
+            filtered = prioritize_trusted(remove_low_quality(remove_self_source(relevant, pipeline_claim)))
+            ranked = rank_with_faiss(pipeline_claim, filtered or relevant, top_k=5)
+            fallback_rows = ranked if ranked else (filtered or relevant)
+
+            for row in fallback_rows[:5]:
+                url = str(row.get("link", "")).strip()
+                analysis_pool.append(
+                    {
+                        "title": str(row.get("title", "")).strip(),
+                        "source": str(row.get("source") or _source_domain(url) or "Unknown").strip(),
+                        "link": url,
+                        "snippet": str(row.get("snippet", "")).strip(),
+                        "date": str(row.get("date", "")).strip(),
+                        "credibility_score": float(row.get("credibility_score", score_source(url))),
+                        "rag_score": float(row.get("similarity", 0.0) or 0.0),
+                    }
+                )
+
+            fallback_used = True
+            if isinstance(retrieval_meta, dict):
+                retrieval_meta = {
+                    **retrieval_meta,
+                    "fallback_used": True,
+                    "fallback_reason": "empty_graph_evidence",
+                }
+
         top_results = analysis_pool[:5]
 
-        context = build_context(analysis_pool)
-        try:
-            graph_result = asyncio.run(run_claim_graph(pipeline_claim, context, analysis_pool))
-        except Exception:
-            graph_result = {
-                "verdict": "UNVERIFIED",
-                "confidence": 45,
-                "prosecutor_argument": "Retrieved sources contain mixed reliability and challenge parts of the claim.",
-                "defender_argument": "Retrieved sources provide partial support, but not enough to strongly confirm the claim.",
-                "citations": [row.get("link", "") for row in analysis_pool if row.get("link")][:3],
-            }
+        logger.info(
+            "[Verify] evidence_count=%s fallback_used=%s",
+            len(top_results),
+            fallback_used,
+        )
+        if top_results:
+            logger.info(
+                "[Verify] top_docs=%s",
+                [
+                    {
+                        "source": row.get("source", "Unknown"),
+                        "score": round(float(row.get("rag_score", 0.0)), 4),
+                        "title": row.get("title", "")[:80],
+                    }
+                    for row in top_results[:3]
+                ],
+            )
 
         verdict = str(graph_result.get("verdict", "UNVERIFIED")).upper()
-        confidence = int(graph_result.get("confidence", 43))
-        prosecutor_argument = graph_result.get("prosecutor_argument", "")
-        defender_argument = graph_result.get("defender_argument", "")
-        prosecutor_points = _clean_points(graph_result.get("prosecutor_points", []))
-        defender_points = _clean_points(graph_result.get("defender_points", []))
-        citations = graph_result.get("citations", [])
-        summary = str(graph_result.get("summary", "")).strip()
+        try:
+            confidence = int(float(graph_result.get("confidence", 43)))
+        except Exception:
+            confidence = 43
 
-        citation_preview = ", ".join(citations[:3])
-        reasoning_text = summary or (
-            f"Prosecutor and defender arguments evaluated with citations: {citation_preview}"
-            if citation_preview
-            else "Prosecutor and defender arguments evaluated with available evidence."
+        reasoning_text = str(graph_result.get("reasoning") or graph_result.get("summary") or "").strip()
+
+        citations = [
+            c for c in (graph_result.get("citations") or [])
+            if isinstance(c, str) and c.strip()
+        ]
+        if not citations:
+            citations = [row.get("link", "") for row in top_results if row.get("link")][:3]
+
+        prosecutor_result = graph_result.get("prosecutor") if isinstance(graph_result.get("prosecutor"), dict) else {}
+        defender_result = graph_result.get("defender") if isinstance(graph_result.get("defender"), dict) else {}
+
+        prosecutor_argument = str(graph_result.get("prosecutor_argument", "")).strip()
+        defender_argument = str(graph_result.get("defender_argument", "")).strip()
+
+        prosecutor_points = _clean_points(
+            prosecutor_result.get("arguments") or graph_result.get("prosecutor_points", [])
         )
+        defender_points = _clean_points(
+            defender_result.get("arguments") or graph_result.get("defender_points", [])
+        )
+
+        if not reasoning_text:
+            citation_preview = ", ".join(citations[:3])
+            reasoning_text = (
+                f"The agents analyzed external evidence from: {citation_preview}."
+                if citation_preview
+                else "The agents analyzed available evidence but confidence remains limited."
+            )
+
         known_override = _known_fact_override(claim, verdict, confidence)
         if known_override:
             verdict = known_override["verdict"]
             confidence = known_override["confidence"]
             reasoning_text = known_override["reasoning"]
-
-        evidence = [
-            {
-                "id": idx + 1,
-                "title": row.get("title", ""),
-                "source": row.get("source", "Unknown"),
-                "source_url": row.get("link", ""),
-                "content": row.get("snippet", ""),
-                "published_date": row.get("date", ""),
-                "credibility_score": score_source(row.get("link", "")),
-                "evidence_source": "hybrid_rag",
-            }
-            for idx, row in enumerate(top_results)
-        ]
-
-        sources = [{"title": row.get("title", ""), "url": row.get("link", "")} for row in top_results]
 
         supportive_rows, contradictory_rows = _partition_sources_by_stance(claim, analysis_pool, verdict)
         supportive_rows = _extend_side_rows(
@@ -1060,22 +1130,37 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             min_count=3,
         )
 
-        prosecutor_evidence = _rows_to_side_evidence(contradictory_rows, max_items=3)
-        defender_evidence = _rows_to_side_evidence(supportive_rows, max_items=3)
-
-        prosecutor_points = _source_backed_points(claim, contradictory_rows, side="prosecutor")
-        defender_points = _source_backed_points(claim, supportive_rows, side="defender")
+        if _points_need_source_fallback(prosecutor_points):
+            prosecutor_points = _source_backed_points(claim, contradictory_rows, side="prosecutor")
+        if _points_need_source_fallback(defender_points):
+            defender_points = _source_backed_points(claim, supportive_rows, side="defender")
 
         # Avoid one-sided sparse cards while keeping each side tied to its own evidence split.
         prosecutor_points = _augment_points(prosecutor_points, contradictory_rows, side="prosecutor", min_points=3)
         defender_points = _augment_points(defender_points, supportive_rows, side="defender", min_points=3)
 
-        prosecutor_result = {"arguments": prosecutor_points}
-        defender_result = {"arguments": defender_points}
-        disagreement_score = calculate_disagreement_score(
-            prosecutor_result.get("arguments", []),
-            defender_result.get("arguments", []),
-        )
+        prosecutor_evidence = _rows_to_side_evidence(contradictory_rows, max_items=3)
+        defender_evidence = _rows_to_side_evidence(supportive_rows, max_items=3)
+
+        disagreement_score = graph_result.get("disagreement_score")
+        if not isinstance(disagreement_score, (int, float)):
+            disagreement_score = calculate_disagreement_score(prosecutor_points, defender_points)
+
+        valid_strengths = {"strong", "moderate", "weak", "none"}
+        prosecutor_strength = str(
+            prosecutor_result.get("prosecution_strength")
+            or graph_result.get("prosecutor_strength", "")
+        ).lower()
+        defender_strength = str(
+            defender_result.get("defense_strength")
+            or graph_result.get("defender_strength", "")
+        ).lower()
+
+        derived_prosecution_strength, derived_defense_strength = _strengths_from_verdict(verdict, confidence)
+        if prosecutor_strength not in valid_strengths:
+            prosecutor_strength = derived_prosecution_strength
+        if defender_strength not in valid_strengths:
+            defender_strength = derived_defense_strength
 
         if known_override:
             confidence = max(int(confidence), int(known_override["confidence"]))
@@ -1088,7 +1173,6 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 disagreement_score,
             )
 
-        prosecutor_strength, defender_strength = _strengths_from_verdict(verdict, confidence)
         comparison_text = _comparison_reasoning(verdict, prosecutor_strength, defender_strength)
 
         reasoning_points = _reasoning_points_with_sources(
@@ -1097,6 +1181,27 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             contradictory_rows,
             claim=claim,
         )
+
+        evidence = [
+            {
+                "id": idx + 1,
+                "title": row.get("title", ""),
+                "source": row.get("source", "Unknown"),
+                "source_url": row.get("link", ""),
+                "content": row.get("snippet", ""),
+                "published_date": row.get("date", ""),
+                "credibility_score": float(row.get("credibility_score", 0.5)),
+                "rag_score": float(row.get("rag_score", 0.0)),
+                "evidence_source": "external_api_rag",
+            }
+            for idx, row in enumerate(top_results)
+        ]
+
+        sources = [{"title": row.get("title", ""), "url": row.get("link", "")} for row in top_results]
+
+        analysis_info = graph_result.get("analysis") if isinstance(graph_result.get("analysis"), dict) else {}
+        domain = str(analysis_info.get("domain") or _predict_domain(claim)).strip().lower() or "general"
+        claim_type = str(analysis_info.get("claim_type") or "factual_claim").strip() or "factual_claim"
 
         verdict_insights = {
             "supporting_sources": len(supportive_rows),
@@ -1111,6 +1216,12 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             ],
             "summary": comparison_text,
             "disagreement_score": disagreement_score,
+            "retrieval": {
+                "fallback_used": fallback_used,
+                "source_count": len(analysis_pool),
+                "top_k": len(top_results),
+                "api_runs": retrieval_meta.get("api_runs", []) if isinstance(retrieval_meta, dict) else [],
+            },
         }
 
         try:
@@ -1124,8 +1235,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
 
         response_payload = {
             "claim": claim,
-            "claim_type": "factual_claim",
-            "domain": _predict_domain(claim),
+            "claim_type": claim_type,
+            "domain": domain,
             "sub_claims": sub_claims,
             "verdict": verdict,
             "confidence": confidence,
@@ -1150,6 +1261,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "citations": citations,
             "sources": sources,
             "evidence": evidence,
+            "retrieval_meta": retrieval_meta,
             "cached": False,
             "processing_time_seconds": round(time_module.time() - start, 1),
         }
@@ -1162,7 +1274,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             claim,
             verdict,
             confidence,
-            _predict_domain(claim),
+            domain,
             user_id=user_id_for_history,
             details=response_payload,
         )
@@ -1186,7 +1298,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "verdict": "UNVERIFIED",
             "confidence": 35,
             "disagreement_score": 0.0,
-            "reasoning": "Unable to complete hybrid retrieval and Gemini arbitration.",
+            "reasoning": "Unable to complete hybrid retrieval and final adjudication.",
             "reasoning_points": ["The request failed before the full analysis pipeline completed."],
             "verdict_insights": {
                 "supporting_sources": 0,

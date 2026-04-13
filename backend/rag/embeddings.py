@@ -59,3 +59,16 @@ class EmbeddingModelSingleton:
 
 def get_embedder() -> EmbeddingModelSingleton:
     return EmbeddingModelSingleton()
+
+
+def embed_texts(texts: List[str]) -> np.ndarray:
+    """Embed a list of texts with SentenceTransformer fallback support."""
+    return get_embedder().encode(texts)
+
+
+def embed_query(query: str) -> np.ndarray:
+    """Embed a single query and return a 1D float32 vector."""
+    vectors = get_embedder().encode([query or ""])
+    if vectors.shape[0] == 0:
+        return np.zeros((get_embedder()._dim,), dtype=np.float32)
+    return vectors[0]

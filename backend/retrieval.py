@@ -22,6 +22,22 @@ STOP_WORDS = {
     "india", "latest", "news", "today", "new"
 }
 
+COMPARISON_CUES = {
+    "better", "worse", "than", "vs", "versus", "compare", "comparison",
+    "stronger", "weaker", "higher", "lower", "best"
+}
+
+STATS_CUES = {
+    "stats", "statistics", "record", "head-to-head", "head to head", "h2h",
+    "win rate", "wins", "losses", "percentage", "average", "strike rate",
+    "economy", "rank", "ranking", "performance"
+}
+
+SCHEDULE_CUES = {
+    "schedule", "fixtures", "fixture", "next match", "upcoming", "today match",
+    "predicted xi", "playing xi", "lineup", "target", "toss", "preview"
+}
+
 
 def build_search_query(claim: str, keywords: List[str] | None = None) -> str:
     """Build a claim-focused search query from meaningful terms."""
@@ -29,14 +45,30 @@ def build_search_query(claim: str, keywords: List[str] | None = None) -> str:
         "is", "are", "was", "the", "a", "an", "in", "of",
         "to", "and", "or", "will", "can", "does", "do"
     }
-    important = [
+    raw_tokens = [
         token.strip(".,!?\"'").lower()
         for token in (claim or "").split()
         if token and len(token.strip(".,!?\"'")) > 2 and token.lower() not in stop
     ]
-    if important:
-        return " ".join(important[:5])
-    return " ".join((keywords or [])[:5]).strip() or (claim or "").strip()
+    if not raw_tokens:
+        return " ".join((keywords or [])[:5]).strip() or (claim or "").strip()
+
+    tokens = list(raw_tokens[:7])
+    lower_claim = (claim or "").lower()
+    is_comparison = any(cue in lower_claim for cue in COMPARISON_CUES)
+
+    if is_comparison:
+        # Force retrieval towards comparative evidence, not previews/schedules.
+        tokens.extend(["head", "to", "head", "stats", "record", "win", "rate"])
+
+    seen = set()
+    ordered = []
+    for token in tokens:
+        if token and token not in seen:
+            seen.add(token)
+            ordered.append(token)
+
+    return " ".join(ordered[:12])
 
 
 def _claim_words(claim: str) -> list[str]:
@@ -51,6 +83,15 @@ def _claim_words(claim: str) -> list[str]:
             seen.add(token)
             ordered.append(token)
     return ordered
+
+
+def _is_comparison_claim(claim: str) -> bool:
+    lower = (claim or "").lower()
+    return any(cue in lower for cue in COMPARISON_CUES)
+
+
+def _contains_any(text: str, phrases: set[str]) -> bool:
+    return any(phrase in text for phrase in phrases)
 
 
 def calculate_relevance(claim: str, article: Dict) -> float:
@@ -77,6 +118,18 @@ def calculate_relevance(claim: str, article: Dict) -> float:
     if phrase_hits:
         score += min(0.4, phrase_hits * 0.2)
 
+    if _is_comparison_claim(claim):
+        # Comparison claims should favor stats-centric pages and reject schedule pages.
+        if _contains_any(full, STATS_CUES):
+            score += 0.25
+        if _contains_any(full, SCHEDULE_CUES):
+            score -= 0.35
+
+        if len(claim_terms) >= 3:
+            entity_hits = sum(1 for term in claim_terms if term in full)
+            if entity_hits <= 1:
+                score *= 0.35
+
     if len(claim_terms) >= 3 and matches == 1:
         score *= 0.4
 
@@ -85,12 +138,24 @@ def calculate_relevance(claim: str, article: Dict) -> float:
 
 def filter_relevant_results(claim: str, results: List[Dict], min_relevance: float = 0.15) -> List[Dict]:
     """Keep only claim-relevant results, preserving relevance score for ranking."""
+    threshold = min_relevance
+    if _is_comparison_claim(claim):
+        threshold = max(min_relevance, 0.28)
+
     relevant: List[Dict] = []
+    scored_rows: List[Dict] = []
     for row in results or []:
         score = calculate_relevance(claim, row)
         row["relevance_score"] = score
-        if score >= min_relevance:
+        scored_rows.append(row)
+        if score >= threshold:
             relevant.append(row)
+
+    # For strict comparison filtering, if too few results survive, keep best-scored rows.
+    if _is_comparison_claim(claim) and len(relevant) < 3:
+        scored_rows.sort(key=lambda item: float(item.get("relevance_score", 0.0)), reverse=True)
+        return scored_rows[: min(5, len(scored_rows))]
+
     return relevant
 
 

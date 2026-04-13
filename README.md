@@ -230,6 +230,38 @@ NEO4J_PASSWORD=password
 
 ---
 
+## Secret Leak Prevention 🛡️
+
+This repo includes automated secret scanning in both local commits and CI.
+
+### Local pre-commit hook (gitleaks)
+
+```bash
+cd fake-news-ai
+python3 -m pip install --user pre-commit
+pre-commit install
+pre-commit run gitleaks --all-files
+```
+
+Files added for this:
+
+- `.pre-commit-config.yaml`
+- `.gitleaks.toml`
+
+### GitHub Actions secret scan
+
+Workflow file:
+
+- `.github/workflows/secret-scan.yml`
+
+Behavior:
+
+- Runs on every `push` and `pull_request`
+- Fails the workflow if potential secrets are found
+- Uses gitleaks with repository config from `.gitleaks.toml`
+
+---
+
 ## API Documentation 📡
 
 ### Verification Endpoints

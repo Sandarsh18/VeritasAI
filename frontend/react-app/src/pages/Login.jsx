@@ -99,7 +99,7 @@ function AppleIcon() {
 
 function Login() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ email: "", password: "", remember: false });
+  const [formData, setFormData] = useState({ identifier: "", password: "", remember: false });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -121,7 +121,8 @@ function Login() {
     setLoading(true);
 
     try {
-      const data = await api.login({ email: formData.email, password: formData.password });
+      const identifier = formData.identifier.trim();
+      const data = await api.login({ username: identifier, email: identifier, password: formData.password });
       const token = data.access_token || data.token || data.jwt;
       if (!token) {
         throw new Error("Missing token");
@@ -130,7 +131,7 @@ function Login() {
       api.setAuthToken(token);
       navigate("/");
     } catch {
-      setError("Invalid email or password.");
+      setError("Invalid username/email or password.");
     } finally {
       setLoading(false);
     }
@@ -155,14 +156,14 @@ function Login() {
 
           <form className="va-auth-form" onSubmit={handleSubmit}>
             <motion.div className="va-field" variants={fieldVariants} initial="hidden" animate="visible" custom={0}>
-              <label className="va-label" htmlFor="login-email">Email</label>
+              <label className="va-label" htmlFor="login-email">Email or Username</label>
               <input
                 id="login-email"
-                type="email"
+                type="text"
                 className="va-input"
-                placeholder="you@example.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="you@example.com or username"
+                value={formData.identifier}
+                onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                 required
               />
             </motion.div>

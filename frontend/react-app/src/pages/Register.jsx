@@ -116,7 +116,7 @@ function getStrength(password) {
 
 function Register() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+  const [formData, setFormData] = useState({ username: "", email: "", password: "", confirmPassword: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
@@ -148,8 +148,8 @@ function Register() {
 
     try {
       const payload = {
-        name: formData.name,
-        email: formData.email,
+        username: formData.username.trim(),
+        email: formData.email.trim(),
         password: formData.password,
       };
 
@@ -157,7 +157,7 @@ function Register() {
       let token = data.access_token || data.token || data.jwt;
 
       if (!token) {
-        const loginData = await api.login({ email: formData.email, password: formData.password });
+        const loginData = await api.login({ username: formData.username.trim(), password: formData.password });
         token = loginData.access_token || loginData.token || loginData.jwt;
       }
 
@@ -194,14 +194,14 @@ function Register() {
 
           <form className="va-auth-form" onSubmit={handleSubmit}>
             <motion.div className="va-field" variants={fieldVariants} initial="hidden" animate="visible" custom={0}>
-              <label className="va-label" htmlFor="register-name">Full Name</label>
+              <label className="va-label" htmlFor="register-name">Username</label>
               <input
                 id="register-name"
                 type="text"
                 className="va-input"
-                placeholder="John Doe"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="john_doe"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
               />
             </motion.div>

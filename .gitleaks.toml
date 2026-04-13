@@ -1,0 +1,8 @@
+title = "veritasai-gitleaks-config"
+
+[allowlist]
+description = "Allow explicit placeholder values used in README examples"
+regexes = [
+  '''SECRET_KEY=change_this_for_production''',
+  '''NEO4J_PASSWORD=password'''
+]
