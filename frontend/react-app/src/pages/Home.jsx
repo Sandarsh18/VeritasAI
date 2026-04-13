@@ -72,12 +72,16 @@ function Home() {
   const [recentClaims, setRecentClaims] = useState([]);
   const handledNavClaimRef = useRef("");
 
-  const handleVoiceTranscript = useCallback((transcript) => {
-    setClaim(transcript);
+  const handleTranscript = useCallback((text) => {
+    setClaim(text);
   }, []);
 
-  const { isListening, supported: voiceSupported, startListening, stopListening } =
-    useVoiceInput(handleVoiceTranscript);
+  const {
+    isListening,
+    isSupported: voiceInputSupported,
+    startListening,
+    stopListening,
+  } = useVoiceInput(handleTranscript);
 
   const { isSpeaking, speak, stopSpeaking } = useVoiceOutput();
 
@@ -192,14 +196,15 @@ function Home() {
   }, [result]);
 
   useEffect(() => {
-    if (result && result.verdict) {
-      const text =
-        `Verdict: ${result.verdict}. ` +
-        `Confidence: ${result.confidence} percent. ` +
-        `${result.reasoning || ""}`;
-      speak(text);
-    }
-  }, [result, speak]);
+    if (!result || !result.verdict) return;
+    const verdictText =
+      `Verdict: ${result.verdict}. ` +
+      `Confidence: ${result.confidence} percent. ` +
+      `${result.reasoning || ""}`;
+
+    const timerId = setTimeout(() => speak(verdictText), 500);
+    return () => clearTimeout(timerId);
+  }, [result?.verdict, result?.confidence, speak]);
 
   const canSubmit = useMemo(() => claim.trim().length > 2 && !loading, [claim, loading]);
   const pipelineProgress = Math.min(100, (activeStep / STEPS.length) * 100);
@@ -288,30 +293,45 @@ function Home() {
           transition={{ type: "spring", stiffness: 300 }}
         />
         <div className="hero-actions">
-          {voiceSupported && (
+          {voiceInputSupported && (
             <button
               type="button"
               onClick={isListening ? stopListening : startListening}
+              title={
+                isListening
+                  ? "Click to stop recording"
+                  : "Click to speak your claim"
+              }
               style={{
-                padding: "10px 18px",
-                marginRight: "10px",
-                borderRadius: "8px",
-                border: isListening ? "2px solid #ef4444" : "2px solid #e5e7eb",
-                background: isListening ? "#fee2e2" : "#f9fafb",
-                cursor: "pointer",
-                fontSize: "18px",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
+                padding: "10px 20px",
+                marginRight: "8px",
+                borderRadius: "8px",
+                border: isListening
+                  ? "2px solid #ef4444"
+                  : "2px solid #d1d5db",
+                background: isListening
+                  ? "#fef2f2"
+                  : "#ffffff",
+                cursor: "pointer",
+                fontSize: "14px",
                 color: isListening ? "#dc2626" : "#374151",
                 fontWeight: 600,
                 transition: "all 0.2s",
-                animation: isListening ? "pulse 1.5s infinite" : "none",
+                boxShadow: isListening
+                  ? "0 0 0 3px rgba(239,68,68,0.2)"
+                  : "none",
+                animation: isListening
+                  ? "micPulse 1.5s ease-in-out infinite"
+                  : "none",
               }}
-              title={isListening ? "Click to stop recording" : "Click to speak your claim"}
             >
-              {isListening ? "🔴" : "🎤"}
-              {isListening ? " Listening..." : " Speak"}
+              <span style={{ fontSize: "18px" }}>
+                {isListening ? "🔴" : "🎤"}
+              </span>
+              {isListening ? "Listening..." : "Speak"}
             </button>
           )}
           <motion.button className="primary-btn verify-btn" onClick={handleVerify} disabled={!canSubmit} whileTap={canSubmit ? { scale: 0.95 } : {}}>
@@ -454,27 +474,28 @@ function Home() {
                           : () =>
                               speak(
                                 `Verdict: ${result.verdict}. ` +
-                                  `Confidence: ${result.confidence} percent. ` +
+                                  `Confidence ${result.confidence} percent. ` +
                                   `${result.reasoning || ""}`
                               )
                       }
                       style={{
-                        padding: "6px 14px",
-                        borderRadius: "8px",
-                        border: "1.5px solid #e5e7eb",
-                        background: isSpeaking ? "#fef3c7" : "#f9fafb",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        marginTop: "8px",
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "6px",
-                        color: "#374151",
+                        padding: "8px 16px",
+                        borderRadius: "8px",
+                        border: "1.5px solid #d1d5db",
+                        background: isSpeaking ? "#fef9c3" : "#f9fafb",
+                        cursor: "pointer",
+                        fontSize: "13px",
                         fontWeight: 500,
+                        color: "#374151",
+                        marginTop: "8px",
                       }}
                       title="Listen to verdict"
                     >
-                      {isSpeaking ? "🔇 Stop" : "🔊 Read Verdict"}
+                      <span>{isSpeaking ? "🔇" : "🔊"}</span>
+                      {isSpeaking ? "Stop Reading" : "Read Verdict"}
                     </button>
                   )}
                 </div>

@@ -1,68 +1,63 @@
-from llm_client import call_ollama, extract_json
+from llm_client import GROQ_DEFENDER_MODEL, call_with_fallback, extract_json
 
 
 def run_defender(claim: str, evidence: list) -> dict:
     ev_text = ""
     for i, article in enumerate(evidence[:4], 1):
-        title = article.get("title", "")
+        title = article.get("title", "No title")
         source = article.get("source", "Unknown")
-        content = article.get("content", "")[:300]
+        content = article.get("content", "")[:350]
         ev_text += (
-            f"\n--- Article {i} ---\n"
+            f"\nARTICLE {i} - Source: {source}\n"
             f"Title: {title}\n"
-            f"Source: {source}\n"
             f"Content: {content}\n"
         )
 
-    if not ev_text:
-        ev_text = "No evidence articles available."
+    if not ev_text.strip():
+        ev_text = "No evidence articles were retrieved."
 
     prompt = f"""You are a researcher defending a claim.
-Your job: find specific arguments FOR this claim
-using the actual content of the articles provided.
+Your ONLY job: find SPECIFIC arguments FOR this claim.
 
-CLAIM: \"{claim}\"
+CLAIM TO SUPPORT: "{claim}"
 
 EVIDENCE ARTICLES:
 {ev_text}
 
-INSTRUCTIONS:
+RULES:
 1. Read each article's actual content carefully
-2. Find what SPECIFICALLY in the article supports
-   or is consistent with the claim
-3. Quote or paraphrase the actual fact from the article
-4. Format: "[Source Name] states that [specific fact
-   from article] which supports the claim because [reason]"
-5. If an article CONTRADICTS the claim, say defense
-   strength is weak - do NOT fabricate support
-6. Never say "contains details that support the core
-   claim wording" - be specific about what those details are
-
-BAD example:
-"BBC contains details that support the core claim wording."
+2. Quote or paraphrase specific facts that support
+3. Format: "[Source] states [specific fact] which
+    supports the claim because [specific reason]"
+4. If an article contradicts - do NOT include it
+5. If NO articles support the claim, set
+   defense_strength to "none" honestly
+6. NEVER write "contains details supporting claim wording"
+7. Be specific about WHAT supports and WHY
 
 GOOD example:
-"BBC reports that Iran and the US agreed to a
-conditional two-week ceasefire allowing shipping
-through Strait of Hormuz - directly confirming
-a ceasefire agreement exists."
+"BBC reports Iran and US agreed to conditional 2-week
+ceasefire allowing Strait of Hormuz shipping - directly
+confirming a ceasefire agreement was made."
 
-Return ONLY valid JSON:
+Return ONLY this JSON:
 {{
   "arguments": [
-    "Argument 1 with specific fact from [Source Name]",
-    "Argument 2 with specific fact from [Source Name]"
+    "Specific supporting fact from [Source]",
+    "Second supporting fact from [Source]"
   ],
-  "strongest_point": "Most specific supporting fact with source",
+  "strongest_point": "Most specific supporting fact",
   "defense_strength": "strong/moderate/weak/none"
 }}"""
 
-    raw = call_ollama(prompt, 0, 500, 768, "Defender")
+    raw = call_with_fallback(prompt, GROQ_DEFENDER_MODEL, 600, "Defender")
     result = extract_json(raw)
 
     if not result or not result.get("arguments"):
         return {
-            "arguments": ["No specific supporting evidence found"],
+            "arguments": [
+                "No specific supporting evidence found in the retrieved articles."
+            ],
             "strongest_point": "No support identified",
             "defense_strength": "none",
         }
@@ -70,6 +65,5 @@ Return ONLY valid JSON:
     return result
 
 
-def defend(claim, evidence, domain):
-    # Compatibility wrapper for existing orchestrator imports.
+def defend(claim, evidence, domain=None):
     return run_defender(claim, evidence or [])

@@ -11,7 +11,15 @@ except Exception:
     END = None
     StateGraph = None
 
-from gemini_client import gemini_complete, gemini_complete_json
+USE_GEMINI = os.getenv("USE_GEMINI", "false").strip().lower() == "true"
+
+if USE_GEMINI:
+    try:
+        from gemini_client import gemini_complete
+    except Exception:
+        gemini_complete = None
+else:
+    gemini_complete = None
 
 # Compatibility bridge: allow imports like `from agents.judge import run_judge`
 # while keeping this file as the runtime module used by main.py.
@@ -94,9 +102,33 @@ def _extract_points(raw_text: str) -> List[str]:
     return lines[:4]
 
 
+def _sources_to_agent_evidence(sources: List[Dict]) -> List[Dict]:
+    evidence: List[Dict] = []
+    for row in sources or []:
+        link = row.get("link", "")
+        domain = (_domain(link) or row.get("source") or "unknown").lower()
+        trusted_tokens = ["reuters.com", "bbc.com", "who.int", "thehindu.com", "ndtv.com"]
+        credibility = 0.9 if any(token in domain for token in trusted_tokens) else 0.7
+        evidence.append(
+            {
+                "title": row.get("title", ""),
+                "source": row.get("source", _domain(link)),
+                "source_url": link,
+                "content": row.get("snippet", ""),
+                "credibility_score": credibility,
+            }
+        )
+    return evidence
+
+
 async def call_llm_async(prompt: str) -> str:
-    """Async wrapper for the existing Gemini text completion call."""
-    return await asyncio.to_thread(gemini_complete, prompt)
+    """Optional async wrapper for Gemini completion when enabled."""
+    if not USE_GEMINI or not gemini_complete:
+        return ""
+    try:
+        return await asyncio.to_thread(gemini_complete, prompt)
+    except Exception:
+        return ""
 
 
 async def decompose_claim(claim: str) -> list:
@@ -129,62 +161,54 @@ async def _defender_node_async(state: ClaimState) -> ClaimState:
 
 
 def _prosecutor_node(state: ClaimState) -> ClaimState:
-    prompt = f'''Given the claim and evidence, argue why the claim is false. Use citations.
-
-Claim: {state.get("claim", "")}
-
-Evidence Context:
-{state.get("context", "")}
-
-Sources:
-{_source_lines(state.get("sources", []))}
-
-Return strict JSON:
-{{
-  "prosecutor_argument": "short paragraph with citations like [1], [2]"
-}}'''
     fallback_points = _fallback_points(state.get("sources", []), side="prosecutor")
+    strength = "none"
     try:
-        result = gemini_complete_json(prompt)
-        argument = result.get("prosecutor_argument", "")
-        points = _extract_points(argument) or fallback_points
+        from agents.prosecutor import run_prosecutor
+
+        evidence = _sources_to_agent_evidence(state.get("sources", []))
+        result = run_prosecutor(state.get("claim", ""), evidence)
+        points = [p for p in (result.get("arguments") or []) if p]
+        if not points:
+            points = fallback_points
+        strength = str(result.get("prosecution_strength", "none")).lower().strip()
     except Exception:
         points = fallback_points
+        strength = "moderate" if len(points) >= 2 else "weak"
+
+    if strength not in {"strong", "moderate", "weak", "none"}:
+        strength = "moderate" if len(points) >= 3 else "weak" if len(points) >= 1 else "none"
 
     return {
         "prosecutor_argument": points[0],
         "prosecutor_points": points,
-        "prosecutor_strength": "moderate" if len(points) >= 2 else "weak",
+        "prosecutor_strength": strength,
     }
 
 
 def _defender_node(state: ClaimState) -> ClaimState:
-    prompt = f'''Given the claim and evidence, argue why the claim might be true. Use citations.
-
-Claim: {state.get("claim", "")}
-
-Evidence Context:
-{state.get("context", "")}
-
-Sources:
-{_source_lines(state.get("sources", []))}
-
-Return strict JSON:
-{{
-  "defender_argument": "short paragraph with citations like [1], [2]"
-}}'''
     fallback_points = _fallback_points(state.get("sources", []), side="defender")
+    strength = "none"
     try:
-        result = gemini_complete_json(prompt)
-        argument = result.get("defender_argument", "")
-        points = _extract_points(argument) or fallback_points
+        from agents.defender import run_defender
+
+        evidence = _sources_to_agent_evidence(state.get("sources", []))
+        result = run_defender(state.get("claim", ""), evidence)
+        points = [p for p in (result.get("arguments") or []) if p]
+        if not points:
+            points = fallback_points
+        strength = str(result.get("defense_strength", "none")).lower().strip()
     except Exception:
         points = fallback_points
+        strength = "moderate" if len(points) >= 2 else "weak"
+
+    if strength not in {"strong", "moderate", "weak", "none"}:
+        strength = "moderate" if len(points) >= 3 else "weak" if len(points) >= 1 else "none"
 
     return {
         "defender_argument": points[0],
         "defender_points": points,
-        "defender_strength": "moderate" if len(points) >= 2 else "weak",
+        "defender_strength": strength,
     }
 
 
