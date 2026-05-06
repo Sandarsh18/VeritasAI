@@ -5,28 +5,11 @@ import { useLocation } from "react-router-dom";
 import AgentCard from "../components/AgentCard";
 import ConfidenceGauge from "../components/ConfidenceGauge";
 import EvidenceCard from "../components/EvidenceCard";
+import PipelineProgress from "../components/PipelineProgress";
+import SkeletonCard from "../components/SkeletonCard";
 import VerdictBadge from "../components/VerdictBadge";
 import { useVoiceInput, useVoiceOutput } from "../hooks/useVoice";
 import { getHistory, getHistoryDetails, verifyClaim } from "../services/api";
-
-const STEPS = [
-  "Claim Testing",
-  "Evidence Retrieval",
-  "Prosecutor Analysis",
-  "Defender Analysis",
-  "Agent Comparison",
-  "Judge Verdict",
-];
-
-const STEP_ICONS = ["🧪", "🔎", "🛡️", "⚖️", "🧭", "✅"];
-const STEP_MESSAGES = [
-  "Testing claim…",
-  "Passing claim to evidence retrieval…",
-  "Passing evidence to prosecutor agent…",
-  "Passing evidence to defender agent…",
-  "Comparing both agents…",
-  "Judge agent is generating final output…",
-];
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -47,8 +30,6 @@ const itemVariants = {
   },
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const getDisagreementLabel = (score) => {
   if (score > 0.7) return "High";
   if (score > 0.4) return "Medium";
@@ -61,16 +42,69 @@ const getContentiousness = (score) => {
   return { label: "Low", color: "#22c55e" };
 };
 
+const sanitizeStages = (stages = {}) => {
+  const allowed = new Set(["pending", "running", "completed", "failed"]);
+  return {
+    claim_analysis: allowed.has(stages?.claim_analysis) ? stages.claim_analysis : "pending",
+    retrieval: allowed.has(stages?.retrieval) ? stages.retrieval : "pending",
+    agent_reasoning: allowed.has(stages?.agent_reasoning) ? stages.agent_reasoning : "pending",
+    verdict: allowed.has(stages?.verdict) ? stages.verdict : "pending",
+  };
+};
+
+const normalizeVerificationResult = (payload) => {
+  const safe = payload && typeof payload === "object" ? payload : {};
+  const prosecutor = safe.prosecutor || safe.prosecutor_analysis || {};
+  const defender = safe.defender || safe.defender_analysis || {};
+
+  return {
+    ...safe,
+    success: Boolean(safe.success),
+    claim: safe.claim || "",
+    evidence: Array.isArray(safe.evidence) ? safe.evidence : [],
+    prosecutor: {
+      ...prosecutor,
+      arguments: Array.isArray(prosecutor.arguments) ? prosecutor.arguments : [],
+    },
+    defender: {
+      ...defender,
+      arguments: Array.isArray(defender.arguments) ? defender.arguments : [],
+    },
+    prosecutor_analysis: safe.prosecutor_analysis || prosecutor,
+    defender_analysis: safe.defender_analysis || defender,
+    prosecutor_evidence: Array.isArray(safe.prosecutor_evidence) ? safe.prosecutor_evidence : [],
+    defender_evidence: Array.isArray(safe.defender_evidence) ? safe.defender_evidence : [],
+    verdict: safe.verdict || "INSUFFICIENT_DATA",
+    reasoning: safe.reasoning || "No reasoning generated.",
+    reasoning_points: Array.isArray(safe.reasoning_points) ? safe.reasoning_points : [],
+    pipeline_status: safe.pipeline_status || (safe.success ? "completed" : "failed"),
+    stages: sanitizeStages(safe.stages),
+  };
+};
+
+/** Derive a pipeline message from backend stages */
+function derivePipelineMessage(stages, pipelineWarning) {
+  if (pipelineWarning) return pipelineWarning;
+  if (!stages) return "";
+  if (stages.verdict === "completed") return "Final verdict generated.";
+  if (stages.agent_reasoning === "running") return "Agents are reasoning over evidence.";
+  if (stages.retrieval === "running") return "Retrieving evidence from APIs.";
+  if (stages.retrieval === "failed") return "Evidence retrieval failed; no relevant sources found.";
+  if (stages.claim_analysis === "running") return "Analyzing claim.";
+  return "";
+}
+
 function Home() {
   const location = useLocation();
   const [claim, setClaim] = useState("");
   const [result, setResult] = useState(null);
-  const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pipelineMessage, setPipelineMessage] = useState("");
   const [recentClaims, setRecentClaims] = useState([]);
+  const [, setPendingStages] = useState(null);
   const handledNavClaimRef = useRef("");
+  const ttsEnabled = false;
 
   const handleTranscript = useCallback((text) => {
     setClaim(text);
@@ -115,11 +149,10 @@ function Home() {
     const cache = readResultCache();
     if (cache[claimText]) {
       setResult(cache[claimText]);
-      setActiveStep(STEPS.length);
       setPipelineMessage("Loaded cached verification. Refreshing with latest evidence…");
       setLoading(true);
       try {
-        const fresh = await verifyClaim(claimText);
+        const fresh = normalizeVerificationResult(await verifyClaim(claimText));
         setResult(fresh);
         persistResult(claimText, fresh);
         setPipelineMessage("Updated with latest analysis.");
@@ -132,16 +165,17 @@ function Home() {
     }
 
     setLoading(true);
-    setActiveStep(1);
-    setPipelineMessage(STEP_MESSAGES[0]);
+    setPendingStages(null);
+    setPipelineMessage("");
     try {
-      const data = await verifyClaim(claimText);
+      const data = normalizeVerificationResult(await verifyClaim(claimText));
+      setPipelineMessage(derivePipelineMessage(data.stages, data.pipeline_warning));
       setResult(data);
-      setActiveStep(STEPS.length);
-      setPipelineMessage("Final verdict generated.");
+      setPendingStages(null);
       persistResult(claimText, data);
     } catch (err) {
       setError(err?.response?.data?.detail || err.message || "Failed to load verification result");
+      setPendingStages(null);
     } finally {
       setLoading(false);
     }
@@ -156,8 +190,7 @@ function Home() {
       getHistoryDetails(historyId)
         .then((details) => {
           setClaim(details?.claim || location.state?.claim || "");
-          setResult(details || null);
-          setActiveStep(STEPS.length);
+          setResult(details ? normalizeVerificationResult(details) : null);
           setPipelineMessage("Loaded selected history snapshot.");
           if (details?.claim) {
             persistResult(details.claim, details);
@@ -196,7 +229,7 @@ function Home() {
   }, [result]);
 
   useEffect(() => {
-    if (!result || !result.verdict) return;
+    if (!ttsEnabled || !result || !result.verdict) return;
     const verdictText =
       `Verdict: ${result.verdict}. ` +
       `Confidence: ${result.confidence} percent. ` +
@@ -207,7 +240,10 @@ function Home() {
   }, [result?.verdict, result?.confidence, speak]);
 
   const canSubmit = useMemo(() => claim.trim().length > 2 && !loading, [claim, loading]);
-  const pipelineProgress = Math.min(100, (activeStep / STEPS.length) * 100);
+
+  // Use backend stages only.
+  const currentStages = result?.stages || {};
+  const retrievalFailed = currentStages.retrieval === "failed";
 
   const handleVerify = async () => {
     if (!canSubmit) return;
@@ -218,11 +254,10 @@ function Home() {
     const cache = readResultCache();
     if (cache[claimText]) {
       setResult(cache[claimText]);
-      setActiveStep(STEPS.length);
       setPipelineMessage("Loaded cached result instantly. Refreshing with latest evidence…");
       setLoading(true);
       try {
-        const fresh = await verifyClaim(claimText);
+        const fresh = normalizeVerificationResult(await verifyClaim(claimText));
         setResult(fresh);
         persistResult(claimText, fresh);
         setPipelineMessage("Updated with latest analysis.");
@@ -236,37 +271,18 @@ function Home() {
 
     setLoading(true);
     setResult(null);
-    setActiveStep(1);
-    setPipelineMessage(STEP_MESSAGES[0]);
+    setPendingStages(null);
+    setPipelineMessage("");
 
-    let interval = null;
     try {
-      const startedAt = Date.now();
-      const minPipelineMs = 4300;
-
-      interval = setInterval(() => {
-        setActiveStep((prev) => {
-          const next = Math.min(prev + 1, STEPS.length - 1);
-          setPipelineMessage(STEP_MESSAGES[next - 1] || "Processing…");
-          return next;
-        });
-      }, 800);
-
-      const data = await verifyClaim(claimText);
-
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < minPipelineMs) {
-        await sleep(minPipelineMs - elapsed);
-      }
-
-      clearInterval(interval);
-      setActiveStep(STEPS.length);
-      setPipelineMessage("Judge verdict generated.");
+      const data = normalizeVerificationResult(await verifyClaim(claimText));
+      setPipelineMessage(derivePipelineMessage(data.stages, data.pipeline_warning));
       setResult(data);
+      setPendingStages(null);
       persistResult(claimText, data);
     } catch (err) {
-      if (interval) clearInterval(interval);
       setError(err?.response?.data?.detail || err.message || "Failed to verify claim");
+      setPendingStages(null);
     } finally {
       setLoading(false);
     }
@@ -277,8 +293,8 @@ function Home() {
     setResult(null);
     setError("");
     setLoading(false);
-    setActiveStep(0);
     setPipelineMessage("");
+    setPendingStages(null);
   };
 
   return (
@@ -372,51 +388,22 @@ function Home() {
         )}
       </motion.div>
 
-      <motion.div className="card pipeline-card" variants={itemVariants}>
-        <div className="pipeline-header-row">
-          <h3>Pipeline Execution</h3>
-          <span className="pipeline-progress-text">{Math.round(pipelineProgress)}% complete</span>
-        </div>
-        {(loading || pipelineMessage) && <p className="pipeline-live-status">{pipelineMessage || "Ready"}</p>}
-        <div className="pipeline-progress-track">
-          <motion.div
-            className="pipeline-progress-fill"
-            initial={{ width: 0 }}
-            animate={{ width: `${pipelineProgress}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          />
-        </div>
-        <div className="pipeline-grid">
-          {STEPS.map((step, idx) => {
-            const isActive = activeStep >= idx + 1;
-            const isCurrent = activeStep === idx + 1;
-            return (
-              <motion.div
-                key={step}
-                className={`pipeline-step ${isActive ? "active" : ""}`}
-                animate={{
-                  opacity: isActive ? 1 : 0.4,
-                  scale: isCurrent ? 1.08 : isActive ? 1.02 : 1,
-                  borderColor: isCurrent ? "var(--accent)" : "transparent",
-                  boxShadow: isCurrent ? "0 0 15px rgba(108, 99, 255, 0.3)" : "none",
-                }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-                <div className="step-indicator">
-                  {isActive ? (
-                    <motion.span initial={{ scale: 0 }} animate={{ scale: isCurrent ? [1, 1.2, 1] : 1 }} transition={{ duration: 1.2, repeat: isCurrent ? Infinity : 0 }}>
-                      {STEP_ICONS[idx]}
-                    </motion.span>
-                  ) : (
-                    <span>{idx + 1}</span>
-                  )}
-                </div>
-                <strong>{step}</strong>
-              </motion.div>
-            );
-          })}
-        </div>
-      </motion.div>
+      {/* Pipeline Progress — uses backend stages, no fake timers */}
+      {(loading || result) && (
+        <motion.div className="card pipeline-card" variants={itemVariants}>
+          <PipelineProgress stages={currentStages} pipelineMessage={pipelineMessage} />
+        </motion.div>
+      )}
+
+      {/* Skeleton loading during pipeline execution */}
+      {loading && !result && (
+        <motion.div className="skeleton-section" variants={containerVariants} initial="hidden" animate="visible">
+          <div className="two-col">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        </motion.div>
+      )}
 
       <AnimatePresence>
         {error && (
@@ -435,8 +422,25 @@ function Home() {
       <AnimatePresence mode="wait">
         {result && (
           <motion.div key="results-section" className="results-wrapper" variants={containerVariants} initial="hidden" animate="visible" exit="exit">
-            <div className="two-col">
-              <motion.div className="result-top card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
+            {/* Warning for failed retrieval or pipeline issues */}
+            {(result.pipeline_warning || retrievalFailed) && (
+              <motion.div className="card warning-box" variants={itemVariants}>
+                  <h4 style={{ color: "#f59e0b", marginTop: 0 }}>{result.pipeline_warning || "Evidence retrieval failed"}</h4>
+                {result.verdict === "INSUFFICIENT_DATA" && (
+                  <p>No evidence was retrieved for this claim. Unable to provide a reliable verdict.</p>
+                )}
+                {result.review_flags && result.review_flags.includes("low_evidence_count") && (
+                  <p>Very few evidence sources were found. Results may be unreliable.</p>
+                )}
+                {retrievalFailed && !result.pipeline_warning && (
+                  <p>No relevant evidence sources could be retrieved. The verdict is based on limited information.</p>
+                )}
+              </motion.div>
+            )}
+
+            {/* Final Verdict + Reasoning: same row on desktop, stacked on mobile */}
+            <div className="two-col verdict-reasoning-row">
+              <motion.div className="result-top card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16)", borderColor: "var(--accent)" }}>
                 <div className="verdict-insights">
                   <VerdictBadge verdict={result.verdict} />
                   <p className="verdict-summary">{result?.verdict_insights?.summary || result.reasoning}</p>
@@ -465,7 +469,7 @@ function Home() {
                       </a>
                     </div>
                   )}
-                  {result && result.verdict && (
+                  {ttsEnabled && result && result.verdict && (
                     <button
                       type="button"
                       onClick={
@@ -510,7 +514,7 @@ function Home() {
                 </motion.div>
               </motion.div>
 
-              <motion.div className="card reasoning-card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
+              <motion.div className="card reasoning-card" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16)", borderColor: "var(--accent)" }}>
                 <h3>Reasoning</h3>
                 {(result.reasoning_points || []).length > 0 ? (
                   <ul className="bullet-list">
@@ -524,13 +528,13 @@ function Home() {
               </motion.div>
             </div>
 
-            {result.prosecutor && result.defender && (
+            {(result.prosecutor || result.prosecutor_analysis) && (result.defender || result.defender_analysis) && (
               <motion.div data-aos="fade-up" data-aos-duration="1000" className="two-col agent-two-col" variants={containerVariants}>
-                <motion.div className="agent-col" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
-                  <AgentCard role="prosecutor" result={result.prosecutor} evidence={result.prosecutor_evidence || result.evidence || []} />
+                <motion.div className="agent-col" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16)", borderColor: "var(--accent)" }}>
+                  <AgentCard role="prosecutor" result={result.prosecutor || result.prosecutor_analysis} evidence={result.prosecutor_evidence || result.evidence || []} emptyMessage="No prosecutor analysis generated." />
                 </motion.div>
-                <motion.div className="agent-col" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
-                  <AgentCard role="defender" result={result.defender} evidence={result.defender_evidence || result.evidence || []} />
+                <motion.div className="agent-col" variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16)", borderColor: "var(--accent)" }}>
+                  <AgentCard role="defender" result={result.defender || result.defender_analysis} evidence={result.defender_evidence || result.evidence || []} emptyMessage="No defender analysis generated." />
                 </motion.div>
               </motion.div>
             )}
@@ -539,13 +543,19 @@ function Home() {
               <motion.h3 variants={itemVariants} style={{ marginBottom: "1rem" }}>
                 Evidence Sources
               </motion.h3>
-              <div className="evidence-grid">
-                {(result.evidence || []).map((article, idx) => (
-                  <motion.div key={article.id || article.title} variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16), -14px 0 20px rgba(0,0,0,0.08), 14px 0 20px rgba(0,0,0,0.08)", borderColor: "var(--accent)" }}>
-                    <EvidenceCard article={article} />
-                  </motion.div>
-                ))}
-              </div>
+              {(result.evidence || []).length === 0 ? (
+                <motion.div className="no-evidence-box" variants={itemVariants}>
+                  <p style={{ color: "#6b7280", fontStyle: "italic" }}>No evidence retrieved for this claim.</p>
+                </motion.div>
+              ) : (
+                <div className="evidence-grid">
+                  {(result.evidence || []).map((article, idx) => (
+                    <motion.div key={article.id || article.title || idx} variants={itemVariants} whileHover={{ scale: 1.01, boxShadow: "0 14px 32px rgba(0,0,0,0.16)", borderColor: "var(--accent)" }}>
+                      <EvidenceCard article={article} />
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

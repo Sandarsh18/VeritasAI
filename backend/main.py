@@ -2,6 +2,7 @@ import json
 import logging
 import asyncio
 import time
+import traceback
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -23,6 +24,7 @@ from auth import (
     verify_token,
 )
 from credibility import score_source
+from services.evidence_classifier import classify_evidence
 from database import (
     ClaimHistory,
     SessionLocal,
@@ -54,6 +56,75 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("veritas")
+
+MINIMAL_PIPELINE_MODE = True
+ENABLE_ADVANCED_CACHE = False
+ENABLE_NEO4J = False
+
+
+def _stage_error(stage: str, exc: Exception) -> Dict:
+    trace = traceback.format_exc()
+    logger.exception("[PIPELINE] FULL ERROR TRACE stage=%s", stage)
+    return {
+        "success": False,
+        "stage": stage,
+        "error": str(exc),
+        "trace": trace,
+    }
+
+
+def _clean_points(points: List) -> List[str]:
+    cleaned: List[str] = []
+    for point in points or []:
+        if isinstance(point, dict):
+            value = (
+                point.get("summary")
+                or point.get("text")
+                or point.get("strongest_point")
+                or point.get("title")
+                or ""
+            )
+        else:
+            value = point
+        text = str(value or "").strip()
+        if text:
+            cleaned.append(text)
+    return cleaned
+
+
+def _point_text(point) -> str:
+    if isinstance(point, dict):
+        return str(
+            point.get("summary")
+            or point.get("text")
+            or point.get("strongest_point")
+            or point.get("title")
+            or ""
+        ).strip()
+    return str(point or "").strip()
+
+
+def _validate_verify_payload(payload: Dict, context: str = "verify") -> Dict:
+    required = [
+        "success",
+        "claim",
+        "evidence",
+        "prosecutor_analysis",
+        "defender_analysis",
+        "verdict",
+        "reasoning",
+        "pipeline_status",
+    ]
+    missing = [key for key in required if key not in payload]
+    if missing:
+        raise ValueError(f"{context} missing response keys: {', '.join(missing)}")
+
+    allowed = {"pending", "running", "completed", "failed"}
+    for name, status in (payload.get("stages") or {}).items():
+        if status not in allowed:
+            raise ValueError(f"{context} has invalid stage status {name}={status}")
+
+    return payload
 
 app = FastAPI(title="VeritasAI")
 
@@ -97,7 +168,10 @@ async def add_timing_header(request, call_next):
 @app.on_event("startup")
 def startup_event():
     init_db()
-    neo_client.connect()
+    if ENABLE_NEO4J:
+        neo_client.connect()
+    else:
+        logger.info("[PIPELINE] Neo4j disabled for minimal recovery mode")
 
 
 @app.on_event("shutdown")
@@ -249,23 +323,7 @@ def _known_fact_override(claim_text: str, verdict: str, confidence: int):
     return None
 
 
-def _clean_points(points: List[str]) -> List[str]:
-    cleaned: List[str] = []
-    blocked_tokens = ["insufficient", "not available due to processing failure"]
-
-    for point in points or []:
-        value = str(point or "").strip()
-        if not value:
-            continue
-        lower = value.lower()
-        if any(token in lower for token in blocked_tokens):
-            continue
-        cleaned.append(value)
-
-    return cleaned
-
-
-def _points_need_source_fallback(points: List[str]) -> bool:
+def _points_need_source_fallback(points: List) -> bool:
     if not points:
         return True
 
@@ -398,7 +456,6 @@ def _stance_scores(claim: str, row: Dict) -> tuple[int, int]:
 def _partition_sources_by_stance(claim: str, results: List[Dict], verdict: str) -> tuple[List[Dict], List[Dict]]:
     supportive: List[Dict] = []
     contradictory: List[Dict] = []
-    neutral: List[Dict] = []
     seen: set[str] = set()
 
     for row in results or []:
@@ -407,54 +464,14 @@ def _partition_sources_by_stance(claim: str, results: List[Dict], verdict: str) 
             continue
         seen.add(key)
 
-        support_score, contradict_score = _stance_scores(claim, row)
-        if contradict_score >= support_score + 2:
+        stance = classify_evidence(claim, row)
+        row["stance"] = stance
+        if stance == "CONTRADICTS":
             contradictory.append(row)
-        elif support_score >= contradict_score + 2:
+        elif stance == "SUPPORTS":
             supportive.append(row)
-        else:
-            neutral.append(row)
 
-    for row in neutral:
-        if len(supportive) <= len(contradictory):
-            supportive.append(row)
-        else:
-            contradictory.append(row)
-
-    total_unique = len(supportive) + len(contradictory)
-    if total_unique >= 2:
-        if not contradictory and supportive:
-            contradictory.append(supportive.pop())
-        if not supportive and contradictory:
-            supportive.append(contradictory.pop())
-
-    if not supportive and not contradictory and results:
-        if (verdict or "").upper() == "FALSE":
-            contradictory = [results[0]]
-        elif (verdict or "").upper() == "TRUE":
-            supportive = [results[0]]
-        else:
-            supportive = [results[0]]
-
-    support_keys = {_source_row_key(r) for r in supportive}
-    contradictory = [r for r in contradictory if _source_row_key(r) not in support_keys]
-
-    if not contradictory:
-        for row in results or []:
-            key = _source_row_key(row)
-            if key not in support_keys:
-                contradictory.append(row)
-                break
-
-    if not supportive:
-        contradiction_keys = {_source_row_key(r) for r in contradictory}
-        for row in results or []:
-            key = _source_row_key(row)
-            if key not in contradiction_keys:
-                supportive.append(row)
-                break
-
-    return supportive[:5], contradictory[:5]
+    return supportive, contradictory[:5]
 
 
 def _strengths_from_verdict(verdict: str, confidence: int):
@@ -879,12 +896,15 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
     sub_claims = [payload.claim]
     user_id_for_history = None
     claim_hash = None
+    current_stage = "request_setup"
 
     try:
         claim = payload.claim.strip()
         if not claim:
             raise HTTPException(status_code=400, detail="Claim is required")
 
+        logger.info("[PIPELINE] Claim analysis started")
+        current_stage = "claim_analysis"
         auth_header = request.headers.get("Authorization", "") if request else ""
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ", 1)[1].strip()
@@ -900,7 +920,9 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
 
         sub_claims = [claim]
         claim_hash = hashlib.sha256(claim.strip().lower().encode()).hexdigest()
-        cached = get_cached_result(claim_hash)
+        cached = get_cached_result(claim_hash) if ENABLE_ADVANCED_CACHE else None
+        if not ENABLE_ADVANCED_CACHE:
+            logger.info("[PIPELINE] Advanced cache disabled")
         if isinstance(cached, dict):
             stale_mirrored_cache = _looks_like_mirrored_sides(cached)
             stale_format_cache = _cache_requires_latest_format(cached)
@@ -970,11 +992,14 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             sub_claims = [claim]
         pipeline_claim = sub_claims[0]
 
+        logger.info("[PIPELINE] Retrieval started")
+        current_stage = "retrieval"
         graph_result = asyncio.run(run_claim_graph(pipeline_claim))
         evidence_rows = list(graph_result.get("evidence") or [])
 
         if not evidence_rows and pipeline_claim.strip().lower() != claim.strip().lower():
             logger.warning("[Verify] No evidence for decomposed claim; retrying full claim")
+            current_stage = "retrieval"
             retry_result = asyncio.run(run_claim_graph(claim))
             retry_rows = list(retry_result.get("evidence") or [])
             if retry_rows:
@@ -1020,6 +1045,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
 
         if not analysis_pool:
             logger.warning("[Verify] Graph retriever returned no evidence; using legacy API fallback")
+            current_stage = "retrieval"
             serp = search_serpapi(pipeline_claim)
             news = search_newsapi(pipeline_claim)
             merged = merge_results(serp, news)
@@ -1051,6 +1077,10 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 }
 
         top_results = analysis_pool[:5]
+        if top_results:
+            logger.info("[PIPELINE] Retrieval completed")
+        else:
+            logger.warning("[PIPELINE] Retrieval failed")
 
         logger.info(
             "[Verify] evidence_count=%s fallback_used=%s",
@@ -1085,18 +1115,18 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         if not citations:
             citations = [row.get("link", "") for row in top_results if row.get("link")][:3]
 
+        logger.info("[PIPELINE] Prosecutor started")
+        current_stage = "prosecutor"
         prosecutor_result = graph_result.get("prosecutor") if isinstance(graph_result.get("prosecutor"), dict) else {}
+        logger.info("[PIPELINE] Defender started")
+        current_stage = "defender"
         defender_result = graph_result.get("defender") if isinstance(graph_result.get("defender"), dict) else {}
 
         prosecutor_argument = str(graph_result.get("prosecutor_argument", "")).strip()
         defender_argument = str(graph_result.get("defender_argument", "")).strip()
 
-        prosecutor_points = _clean_points(
-            prosecutor_result.get("arguments") or graph_result.get("prosecutor_points", [])
-        )
-        defender_points = _clean_points(
-            defender_result.get("arguments") or graph_result.get("defender_points", [])
-        )
+        prosecutor_points = prosecutor_result.get("arguments") or graph_result.get("prosecutor_points", [])
+        defender_points = defender_result.get("arguments") or graph_result.get("defender_points", [])
 
         if not reasoning_text:
             citation_preview = ", ".join(citations[:3])
@@ -1142,6 +1172,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         prosecutor_evidence = _rows_to_side_evidence(contradictory_rows, max_items=3)
         defender_evidence = _rows_to_side_evidence(supportive_rows, max_items=3)
 
+        logger.info("[PIPELINE] Judge started")
+        current_stage = "judge"
         disagreement_score = graph_result.get("disagreement_score")
         if not isinstance(disagreement_score, (int, float)):
             disagreement_score = calculate_disagreement_score(prosecutor_points, defender_points)
@@ -1172,6 +1204,16 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 contradictory_rows,
                 disagreement_score,
             )
+
+        retrieval_failed = len(top_results) == 0
+        if retrieval_failed:
+            verdict = "INSUFFICIENT_DATA"
+            confidence = 0
+            reasoning_text = "Retrieval pipeline failed."
+            prosecutor_points = ["No prosecutor analysis generated."]
+            defender_points = ["No defender analysis generated."]
+            prosecutor_strength = "none"
+            defender_strength = "none"
 
         comparison_text = _comparison_reasoning(verdict, prosecutor_strength, defender_strength)
 
@@ -1224,16 +1266,27 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             },
         }
 
-        try:
+        if ENABLE_NEO4J:
             neo_client.store_claim(
                 claim=claim,
                 results=top_results,
                 verdict={"verdict": verdict, "confidence": confidence},
             )
-        except Exception:
-            pass
+        else:
+            logger.info("[PIPELINE] Neo4j writes disabled")
 
+        stages = {
+            "claim_analysis": "completed",
+            "retrieval": "failed" if retrieval_failed else "completed",
+            "agent_reasoning": "failed" if retrieval_failed else "completed",
+            "verdict": "failed" if retrieval_failed else "completed",
+        }
+        pipeline_status = "failed" if retrieval_failed else "completed"
+
+        logger.info("[PIPELINE] Response serialization started")
+        current_stage = "response_serialization"
         response_payload = {
+            "success": pipeline_status == "completed",
             "claim": claim,
             "claim_type": claim_type,
             "domain": domain,
@@ -1244,16 +1297,24 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "reasoning": reasoning_text or comparison_text,
             "reasoning_points": reasoning_points,
             "verdict_insights": verdict_insights,
-            "prosecutor_argument": prosecutor_points[0] if prosecutor_points else prosecutor_argument,
-            "defender_argument": defender_points[0] if defender_points else defender_argument,
+            "prosecutor_argument": _point_text(prosecutor_points[0]) if prosecutor_points else prosecutor_argument,
+            "defender_argument": _point_text(defender_points[0]) if defender_points else defender_argument,
+            "prosecutor_analysis": {
+                "arguments": prosecutor_points,
+                "strength": prosecutor_strength,
+            },
+            "defender_analysis": {
+                "arguments": defender_points,
+                "strength": defender_strength,
+            },
             "prosecutor": {
                 "arguments": prosecutor_points,
-                "strongest_point": prosecutor_points[0] if prosecutor_points else "N/A",
+                "strongest_point": _point_text(prosecutor_points[0]) if prosecutor_points else "N/A",
                 "prosecution_strength": prosecutor_strength,
             },
             "defender": {
                 "arguments": defender_points,
-                "strongest_point": defender_points[0] if defender_points else "N/A",
+                "strongest_point": _point_text(defender_points[0]) if defender_points else "N/A",
                 "defense_strength": defender_strength,
             },
             "prosecutor_evidence": prosecutor_evidence,
@@ -1264,10 +1325,17 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "retrieval_meta": retrieval_meta,
             "cached": False,
             "processing_time_seconds": round(time_module.time() - start, 1),
+            "pipeline_status": pipeline_status,
+            "pipeline_warning": "Retrieval pipeline failed." if retrieval_failed else "",
+            "stages": stages,
         }
 
         response_payload["cache_hit"] = False
-        save_cached_result(claim_hash, response_payload)
+        response_payload["cache_source"] = "fresh"
+
+        print(json.dumps(response_payload, indent=2))
+
+        _validate_verify_payload(response_payload, context="verify-final")
 
         history_row = _save_history(
             db,
@@ -1284,21 +1352,25 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         return response_payload
         
     except Exception as e:
-        import traceback
         tb = traceback.format_exc()
+        failed_stage = locals().get("current_stage", "pipeline")
         print(f"[API] CRITICAL ERROR in /api/verify:")
         print(tb)
-        logger.error(f"[CRITICAL] /api/verify failed: {tb}")
+        logger.exception("[PIPELINE] FULL ERROR TRACE stage=%s", failed_stage)
 
         fallback = {
+            "success": False,
+            "stage": failed_stage,
+            "error": str(e),
+            "trace": tb,
             "claim": payload.claim,
             "claim_type": "factual_claim",
             "domain": _predict_domain(payload.claim),
             "sub_claims": locals().get("sub_claims", [payload.claim]),
-            "verdict": "UNVERIFIED",
-            "confidence": 35,
+            "verdict": "INSUFFICIENT_DATA" if failed_stage == "retrieval" else "UNVERIFIED",
+            "confidence": 0 if failed_stage == "retrieval" else 35,
             "disagreement_score": 0.0,
-            "reasoning": "Unable to complete hybrid retrieval and final adjudication.",
+            "reasoning": "Retrieval pipeline failed." if failed_stage == "retrieval" else "Unable to complete minimal verification pipeline.",
             "reasoning_points": ["The request failed before the full analysis pipeline completed."],
             "verdict_insights": {
                 "supporting_sources": 0,
@@ -1328,10 +1400,26 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "cached": False,
             "cache_hit": False,
             "processing_time_seconds": round(time_module.time() - start, 1),
-            "error_note": "Hybrid pipeline failed.",
+            "error_note": "Minimal pipeline failed.",
+            "prosecutor_analysis": {
+                "arguments": ["No prosecutor analysis generated."],
+                "strength": "none",
+            },
+            "defender_analysis": {
+                "arguments": ["No defender analysis generated."],
+                "strength": "none",
+            },
+            "pipeline_status": "failed",
+            "pipeline_warning": str(e),
+            "stages": {
+                "claim_analysis": "failed" if failed_stage == "claim_analysis" else "completed",
+                "retrieval": "failed" if failed_stage in {"retrieval", "prosecutor", "defender", "judge", "response_serialization", "pipeline"} else "pending",
+                "agent_reasoning": "failed" if failed_stage in {"prosecutor", "defender", "judge", "response_serialization", "pipeline"} else "pending",
+                "verdict": "failed",
+            },
         }
 
-        if "claim_hash" in locals():
+        if ENABLE_ADVANCED_CACHE and "claim_hash" in locals():
             save_cached_result(claim_hash, fallback)
 
         try:

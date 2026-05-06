@@ -22,7 +22,12 @@ def generate_verdict_pdf(data: dict) -> bytes:
     story.append(Spacer(1, 0.5 * cm))
     story.append(Paragraph(f"Claim: {data.get('claim', '')}", styles["Normal"]))
     story.append(Paragraph(f"Verdict: {data.get('verdict', '')}", styles["Heading2"]))
-    story.append(Paragraph(f"Confidence: {data.get('confidence', 0):.0%}", styles["Normal"]))
+    try:
+        confidence = int(float(data.get("confidence", 0)))
+    except Exception:
+        confidence = 0
+    confidence_decimal = confidence / 100.0
+    story.append(Paragraph(f"Confidence: {confidence_decimal:.0%}", styles["Normal"]))
     story.append(Spacer(1, 0.3 * cm))
     story.append(Paragraph("Prosecutor Arguments", styles["Heading3"]))
     for arg in data.get("prosecutor", {}).get("arguments", []):

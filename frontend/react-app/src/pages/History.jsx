@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import VerdictBadge from "../components/VerdictBadge";
-import { getHistoryResponse } from "../services/api";
+import { deleteHistoryClaim, getHistoryResponse } from "../services/api";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -25,6 +25,7 @@ function History() {
   const [hoveredClaim, setHoveredClaim] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const fetchHistory = async (token) => {
     try {
@@ -48,6 +49,22 @@ function History() {
     setIsAuthenticated(Boolean(token));
     fetchHistory(token);
   }, []);
+
+  const handleDeleteClaim = async (event, claimId) => {
+    event.stopPropagation();
+    if (!window.confirm("Delete this claim?")) return;
+
+    try {
+      setDeletingId(claimId);
+      await deleteHistoryClaim(claimId);
+      setRows((prev) => prev.filter((row) => row.id !== claimId));
+    } catch (error) {
+      console.error("Delete claim error:", error);
+      window.alert(error?.response?.data?.detail || "Failed to delete claim");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <motion.div 
@@ -93,6 +110,7 @@ function History() {
                 <th>Confidence</th>
                 <th>Domain</th>
                 <th>Timestamp</th>
+                {isAuthenticated && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -127,6 +145,18 @@ function History() {
                     <span className="domain-chip">{row.domain}</span>
                   </td>
                   <td>{new Date(row.timestamp).toLocaleString()}</td>
+                  {isAuthenticated && (
+                    <td>
+                      <button
+                        type="button"
+                        className="history-delete-btn"
+                        onClick={(event) => handleDeleteClaim(event, row.id)}
+                        disabled={deletingId === row.id}
+                      >
+                        {deletingId === row.id ? "Deleting..." : "Delete"}
+                      </button>
+                    </td>
+                  )}
                 </motion.tr>
               ))}
             </tbody>

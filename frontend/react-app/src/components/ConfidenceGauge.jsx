@@ -1,5 +1,3 @@
-import React from "react";
-
 const ConfidenceGauge = ({ confidence = 0 }) => {
   const pct = Math.min(Math.max(confidence, 0), 1);
   const color = pct > 0.7 ? "#22c55e" : pct > 0.4 ? "#f59e0b" : "#ef4444";

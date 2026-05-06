@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from datetime import datetime
 import uuid
 
@@ -9,6 +10,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 load_dotenv()
+
+logger = logging.getLogger("veritas.database")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./veritas.db")
 
@@ -97,48 +100,82 @@ def get_db():
 
 def get_cached_result(claim_hash: str, max_age_hours: int = 24):
     """Return cached verification result if it exists and is fresh."""
-    import sqlite3, json
+    import sqlite3
     from datetime import datetime, timedelta
 
     conn = sqlite3.connect("veritas.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS claim_cache (
-            claim_hash TEXT PRIMARY KEY,
-            result_json TEXT,
-            created_at TEXT
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS claim_cache (
+                claim_hash TEXT PRIMARY KEY,
+                result_json TEXT,
+                created_at TEXT
+            )
+        """)
+        cutoff = (datetime.utcnow() - timedelta(hours=max_age_hours)).isoformat()
+        cursor.execute(
+            "SELECT result_json FROM claim_cache WHERE claim_hash=? AND created_at>?",
+            (claim_hash, cutoff)
         )
-    """)
-    cutoff = (datetime.utcnow() - timedelta(hours=max_age_hours)).isoformat()
-    cursor.execute(
-        "SELECT result_json FROM claim_cache WHERE claim_hash=? AND created_at>?",
-        (claim_hash, cutoff)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return json.loads(row[0]) if row else None
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        try:
+            payload = json.loads(row[0])
+        except Exception:
+            logger.warning("Cache decode failed for claim_hash=%s", claim_hash)
+            return None
+
+        if not isinstance(payload, dict):
+            logger.warning("Cache payload is not a dict for claim_hash=%s", claim_hash)
+            return None
+
+        return payload
+    finally:
+        conn.close()
 
 
 def save_cached_result(claim_hash: str, result: dict):
     """Save verification result to cache."""
-    import sqlite3, json
+    import sqlite3
     from datetime import datetime
 
-    conn = sqlite3.connect("veritas.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS claim_cache (
-            claim_hash TEXT PRIMARY KEY,
-            result_json TEXT,
-            created_at TEXT
+    if not isinstance(result, dict):
+        logger.warning(
+            "Skipping cache write for claim_hash=%s because payload is not a dict",
+            claim_hash,
         )
-    """)
-    cursor.execute(
-        "INSERT OR REPLACE INTO claim_cache VALUES (?, ?, ?)",
-        (claim_hash, json.dumps(result), datetime.utcnow().isoformat())
-    )
-    conn.commit()
-    conn.close()
+        return False
+
+    try:
+        serialized = json.dumps(result, ensure_ascii=False)
+    except Exception:
+        logger.warning("Skipping cache write for claim_hash=%s due to JSON encoding failure", claim_hash)
+        return False
+
+    conn = sqlite3.connect("veritas.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS claim_cache (
+                claim_hash TEXT PRIMARY KEY,
+                result_json TEXT,
+                created_at TEXT
+            )
+        """)
+        cursor.execute(
+            "INSERT OR REPLACE INTO claim_cache VALUES (?, ?, ?)",
+            (claim_hash, serialized, datetime.utcnow().isoformat())
+        )
+        conn.commit()
+        return True
+    except Exception:
+        logger.exception("Failed to persist cache for claim_hash=%s", claim_hash)
+        return False
+    finally:
+        conn.close()
 
 
 def get_claim_by_short_id(short_id: str):

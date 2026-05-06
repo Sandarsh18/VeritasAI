@@ -4,11 +4,10 @@ function EvidenceCard({ article }) {
   const title = article?.title || "Untitled source";
   const source = article?.source || "Unknown source";
   const content = article?.content || "No summary available.";
-  const publishedDate = article?.published_date || "Unknown date";
-  const author = article?.author || "Staff";
-  const sourceUrl = article?.source_url || "#";
-  const credibilityScore = Number(article?.credibility_score || 0);
-  const evidenceSource = article?.evidence_source || "";
+  const sourceUrl = article?.url || article?.source_url || "#";
+  const credibilityValue = Number(article?.credibility ?? article?.credibility_score ?? 0);
+  const credibilityScore = credibilityValue > 1 ? credibilityValue / 100 : credibilityValue;
+  const evidenceSource = article?.evidence_source || article?.source || "";
 
   // Source quality badge
   const getSourceBadge = (score) => {
@@ -76,10 +75,6 @@ function EvidenceCard({ article }) {
         >
           Credibility: {(credibilityScore * 100).toFixed(0)}%
         </motion.span>
-      </div>
-      <div className="meta-line">
-        <span>{publishedDate}</span>
-        <span>{author}</span>
       </div>
       <div className="meta-line" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
         <span

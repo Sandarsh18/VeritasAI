@@ -3,6 +3,8 @@ import logging
 import os
 import re
 import sys
+import time
+import traceback
 from typing import Dict, List, TypedDict
 
 try:
@@ -30,6 +32,9 @@ LOGGER = logging.getLogger("veritas.graph")
 class ClaimState(TypedDict, total=False):
     claim: str
     context: str
+    queries: List[str]
+    raw_results: List[Dict]
+    filtered_results: List[Dict]
     analysis: Dict
     evidence: List[Dict]
     retrieval_meta: Dict
@@ -48,6 +53,15 @@ class ClaimState(TypedDict, total=False):
     summary: str
     citations: List[str]
     disagreement_score: float
+    timing_claim_analysis_ms: float
+    timing_retrieval_ms: float
+    timing_prosecutor_ms: float
+    timing_defender_ms: float
+    timing_judge_ms: float
+
+
+def _elapsed_ms(start: float) -> float:
+    return round((time.perf_counter() - start) * 1000, 2)
 
 
 def _clean_points(points: List[str]) -> List[str]:
@@ -91,13 +105,15 @@ def _citation_urls(evidence: List[Dict]) -> List[str]:
 
 
 def _analyzer_node(state: ClaimState) -> ClaimState:
+    start = time.perf_counter()
     claim = (state.get("claim") or "").strip()
     analysis = analyze_claim(claim)
     LOGGER.info("[Graph] Analyzer claim_type=%s domain=%s", analysis.get("claim_type"), analysis.get("domain"))
-    return {"analysis": analysis}
+    return {"analysis": analysis, "timing_claim_analysis_ms": _elapsed_ms(start)}
 
 
 def _retriever_node(state: ClaimState) -> ClaimState:
+    start = time.perf_counter()
     claim = state.get("claim", "")
     analysis = state.get("analysis", {})
 
@@ -130,21 +146,113 @@ def _retriever_node(state: ClaimState) -> ClaimState:
             "retry": retry_meta,
         }
 
+    if evidence:
+        LOGGER.info("[PIPELINE] Retrieval completed")
+    else:
+        LOGGER.warning("[PIPELINE] Retrieval failed")
     LOGGER.info("[Graph] Retriever evidence_count=%s", len(evidence))
+    LOGGER.info("[Graph] Retriever queries=%s", (meta or {}).get("queries", []))
+    LOGGER.info(
+        "[Graph] Retriever top_titles=%s",
+        [row.get("title", "")[:80] for row in (evidence or [])[:3]],
+    )
+
+    raw_results = []
+    if isinstance(meta, dict):
+        for run in meta.get("api_runs", []) or []:
+            for q in run.get("queries", []) or []:
+                raw_results.append(
+                    {
+                        "query": q.get("query", ""),
+                        "merged_count": q.get("merged_count", 0),
+                        "serp_count": (q.get("serpapi") or {}).get("count", 0),
+                        "news_count": (q.get("newsapi") or {}).get("count", 0),
+                    }
+                )
+
     return {
         "evidence": evidence,
         "retrieval_meta": meta,
+        "queries": (meta or {}).get("queries", []),
+        "raw_results": raw_results,
+        "filtered_results": (meta or {}).get("top_k", []),
+        "timing_retrieval_ms": _elapsed_ms(start),
     }
 
 
+def _stage_failure(stage: str, exc: Exception, start: float) -> ClaimState:
+    trace = traceback.format_exc()
+    LOGGER.exception("[PIPELINE] FULL ERROR TRACE stage=%s", stage)
+    return {
+        "pipeline_error": {
+            "success": False,
+            "stage": stage,
+            "error": str(exc),
+            "trace": trace,
+        },
+        f"timing_{stage}_ms": _elapsed_ms(start),
+    }
+
+
+def _point_summary(point) -> str:
+    if isinstance(point, dict):
+        return str(point.get("summary") or point.get("text") or point.get("title") or "").strip()
+    return str(point or "").strip()
+
+
 def _prosecutor_node(state: ClaimState) -> ClaimState:
+    start = time.perf_counter()
     claim = state.get("claim", "")
     evidence = state.get("evidence", [])
-    result = run_prosecutor(claim, evidence)
-    points = _clean_points(result.get("arguments", []))
+    LOGGER.info("[PIPELINE] Prosecutor started")
+    LOGGER.info("[Graph] Evidence passed to agents (prosecutor) count=%s", len(evidence or []))
+
+    # CRITICAL: Skip LLM call when no evidence — prevent hallucination
+    if not evidence:
+        LOGGER.warning("[Graph] No evidence for prosecutor — using canned response")
+        return {
+            "prosecutor": {
+                "arguments": ["No contradictory evidence found."],
+                "strongest_point": "No evidence retrieved",
+                "prosecution_strength": "none",
+                "evidence_count": 0,
+            },
+            "prosecutor_argument": "No contradictory evidence found.",
+            "prosecutor_points": ["No contradictory evidence found."],
+            "prosecutor_strength": "none",
+            "timing_prosecutor_ms": _elapsed_ms(start),
+        }
+
+    LOGGER.info(
+        "[Graph] Evidence passed to agents (prosecutor) sample=%s",
+        [row.get("title", "")[:80] for row in (evidence or [])[:2]],
+    )
+    try:
+        result = run_prosecutor(claim, evidence)
+    except Exception as exc:
+        failure = _stage_failure("prosecutor", exc, start)
+        failure.update(
+            {
+                "prosecutor": {
+                    "success": False,
+                    "stage": "prosecutor",
+                    "error": str(exc),
+                    "trace": failure["pipeline_error"]["trace"],
+                    "arguments": [],
+                    "strongest_point": "No prosecutor analysis generated.",
+                    "prosecution_strength": "none",
+                    "evidence_count": len(evidence or []),
+                },
+                "prosecutor_argument": "No prosecutor analysis generated.",
+                "prosecutor_points": ["No prosecutor analysis generated."],
+                "prosecutor_strength": "none",
+            }
+        )
+        return failure
+    points = result.get("arguments", [])
 
     if not points:
-        points = ["No specific contradicting evidence found in retrieved sources."]
+        points = []
 
     strength = str(result.get("prosecution_strength", "none") or "none").lower()
     if strength not in {"strong", "moderate", "weak", "none"}:
@@ -156,20 +264,66 @@ def _prosecutor_node(state: ClaimState) -> ClaimState:
             "arguments": points,
             "prosecution_strength": strength,
         },
-        "prosecutor_argument": points[0],
+        "prosecutor_argument": _point_summary(points[0]) if points else "",
         "prosecutor_points": points,
         "prosecutor_strength": strength,
+        "timing_prosecutor_ms": _elapsed_ms(start),
     }
 
 
 def _defender_node(state: ClaimState) -> ClaimState:
+    start = time.perf_counter()
     claim = state.get("claim", "")
     evidence = state.get("evidence", [])
-    result = run_defender(claim, evidence)
-    points = _clean_points(result.get("arguments", []))
+    LOGGER.info("[PIPELINE] Defender started")
+    LOGGER.info("[Graph] Evidence passed to agents (defender) count=%s", len(evidence or []))
+
+    # CRITICAL: Skip LLM call when no evidence — prevent hallucination
+    if not evidence:
+        LOGGER.warning("[Graph] No evidence for defender — using canned response")
+        return {
+            "defender": {
+                "arguments": ["No supporting evidence found."],
+                "strongest_point": "No evidence retrieved",
+                "defense_strength": "none",
+                "evidence_count": 0,
+            },
+            "defender_argument": "No supporting evidence found.",
+            "defender_points": ["No supporting evidence found."],
+            "defender_strength": "none",
+            "timing_defender_ms": _elapsed_ms(start),
+        }
+
+    LOGGER.info(
+        "[Graph] Evidence passed to agents (defender) sample=%s",
+        [row.get("title", "")[:80] for row in (evidence or [])[:2]],
+    )
+    try:
+        result = run_defender(claim, evidence)
+    except Exception as exc:
+        failure = _stage_failure("defender", exc, start)
+        failure.update(
+            {
+                "defender": {
+                    "success": False,
+                    "stage": "defender",
+                    "error": str(exc),
+                    "trace": failure["pipeline_error"]["trace"],
+                    "arguments": [],
+                    "strongest_point": "No defender analysis generated.",
+                    "defense_strength": "none",
+                    "evidence_count": len(evidence or []),
+                },
+                "defender_argument": "No defender analysis generated.",
+                "defender_points": ["No defender analysis generated."],
+                "defender_strength": "none",
+            }
+        )
+        return failure
+    points = result.get("arguments", [])
 
     if not points:
-        points = ["No specific supporting evidence found in retrieved sources."]
+        points = []
 
     strength = str(result.get("defense_strength", "none") or "none").lower()
     if strength not in {"strong", "moderate", "weak", "none"}:
@@ -181,13 +335,16 @@ def _defender_node(state: ClaimState) -> ClaimState:
             "arguments": points,
             "defense_strength": strength,
         },
-        "defender_argument": points[0],
+        "defender_argument": _point_summary(points[0]) if points else "",
         "defender_points": points,
         "defender_strength": strength,
+        "timing_defender_ms": _elapsed_ms(start),
     }
 
 
 def _judge_node(state: ClaimState) -> ClaimState:
+    start = time.perf_counter()
+    LOGGER.info("[PIPELINE] Judge started")
     claim = state.get("claim", "")
     prosecutor = state.get("prosecutor") or {
         "arguments": state.get("prosecutor_points", []),
@@ -199,7 +356,26 @@ def _judge_node(state: ClaimState) -> ClaimState:
     }
     evidence = state.get("evidence", [])
 
-    result = run_judge(claim, prosecutor, defender, evidence)
+    try:
+        result = run_judge(claim, prosecutor, defender, evidence)
+    except Exception as exc:
+        failure = _stage_failure("judge", exc, start)
+        failure.update(
+            {
+                "judge": {
+                    "success": False,
+                    "stage": "judge",
+                    "error": str(exc),
+                    "trace": failure["pipeline_error"]["trace"],
+                },
+                "verdict": "INSUFFICIENT_DATA",
+                "confidence": 0,
+                "reasoning": "Judge stage failed before verdict generation.",
+                "summary": "Judge stage failed before verdict generation.",
+                "citations": _citation_urls(evidence),
+            }
+        )
+        return failure
     verdict = str(result.get("verdict", "UNVERIFIED")).upper()
 
     try:
@@ -208,7 +384,7 @@ def _judge_node(state: ClaimState) -> ClaimState:
         confidence = 43
 
     confidence = max(36, min(95, 63 if confidence == 50 else confidence))
-    reasoning = str(result.get("reasoning", "")).strip() or "Insufficient evidence for a definitive verdict."
+    reasoning = str(result.get("reasoning", "")).strip() or "Insufficient relevant evidence found to verify this claim."
 
     return {
         "judge": result,
@@ -217,6 +393,7 @@ def _judge_node(state: ClaimState) -> ClaimState:
         "reasoning": reasoning,
         "summary": reasoning,
         "citations": _citation_urls(evidence),
+        "timing_judge_ms": _elapsed_ms(start),
     }
 
 
@@ -243,13 +420,36 @@ def _build_langgraph():
     return graph.compile()
 
 
-_GRAPH = _build_langgraph()
+_GRAPH = None
+LOGGER.info("[PIPELINE] LangGraph disabled for minimal recovery mode")
 
 
 def _run_sequential(state: ClaimState) -> ClaimState:
     merged: ClaimState = dict(state)
-    merged.update(_analyzer_node(merged))
-    merged.update(_retriever_node(merged))
+    LOGGER.info("[PIPELINE] Claim analysis started")
+    try:
+        merged.update(_analyzer_node(merged))
+    except Exception as exc:
+        merged.update(_stage_failure("claim_analysis", exc, time.perf_counter()))
+        merged.setdefault("analysis", {"domain": "general", "key_keywords": []})
+
+    LOGGER.info("[PIPELINE] Retrieval started")
+    try:
+        merged.update(_retriever_node(merged))
+    except Exception as exc:
+        merged.update(_stage_failure("retrieval", exc, time.perf_counter()))
+        merged.setdefault("evidence", [])
+        merged.setdefault(
+            "retrieval_meta",
+            {
+                "success": False,
+                "stage": "retrieval",
+                "error": str(exc),
+                "trace": traceback.format_exc(),
+                "retrieved_count": 0,
+            },
+        )
+
     merged.update(_prosecutor_node(merged))
     merged.update(_defender_node(merged))
     merged.update(_judge_node(merged))
@@ -291,7 +491,11 @@ async def run_claim_graph(claim: str, context: str = "", sources: List[Dict] | N
         state["evidence"] = _normalize_sources(sources)
 
     if _GRAPH is not None:
-        result: ClaimState = await asyncio.to_thread(_GRAPH.invoke, state)
+        try:
+            result: ClaimState = await asyncio.to_thread(_GRAPH.invoke, state)
+        except Exception as exc:
+            LOGGER.exception("[Graph] LangGraph invoke failed; falling back to sequential runner: %s", exc)
+            result = _run_sequential(state)
     else:
         result = _run_sequential(state)
 

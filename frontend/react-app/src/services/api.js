@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
   timeout: 300000,
 });
 
@@ -20,6 +20,17 @@ if (savedToken) {
 
 export const verifyClaim = async (claim) => {
   const { data } = await api.post("/api/verify", { claim });
+  console.log("[UI Debug] /api/verify response", {
+    keys: Object.keys(data || {}),
+    evidenceCount: Array.isArray(data?.evidence) ? data.evidence.length : 0,
+    prosecutorArgs: Array.isArray(data?.prosecutor?.arguments)
+      ? data.prosecutor.arguments.length
+      : 0,
+    defenderArgs: Array.isArray(data?.defender?.arguments)
+      ? data.defender.arguments.length
+      : 0,
+    pipelineWarning: data?.pipeline_warning || "",
+  });
   return data;
 };
 
@@ -59,6 +70,22 @@ export const getHistory = async (token) => {
 
 export const getHistoryDetails = async (historyId) => {
   const { data } = await api.get(`/api/claims/history/${historyId}`);
+  return data;
+};
+
+export const deleteHistoryClaim = async (historyId, token) => {
+  const resolvedToken =
+    token ||
+    localStorage.getItem("veritas-token") ||
+    sessionStorage.getItem("veritas-token") ||
+    null;
+
+  const headers = {};
+  if (resolvedToken) {
+    headers.Authorization = `Bearer ${resolvedToken}`;
+  }
+
+  const { data } = await api.delete(`/api/claims/${historyId}`, { headers });
   return data;
 };
 
