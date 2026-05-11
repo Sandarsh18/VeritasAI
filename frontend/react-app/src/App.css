@@ -693,10 +693,22 @@
 }
 
 .verdict-badge {
-  width: fit-content;
-  padding: 0.4rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  max-width: 100%;
+  min-width: max-content;
+  justify-self: start;
+  align-self: start;
+  padding: 0.45rem 0.9rem;
   border-radius: 999px;
   font-weight: 700;
+  font-size: 0.88rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-align: center;
+  overflow: visible;
 }
 
 .result-top {
@@ -704,6 +716,8 @@
   justify-content: space-between;
   align-items: stretch;
   gap: 1rem;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .verdict-insights {
@@ -723,14 +737,39 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+  align-items: center;
 }
 
 .insight-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
   border-radius: 999px;
-  padding: 0.2rem 0.55rem;
+  padding: 0.28rem 0.7rem;
   font-size: 0.78rem;
+  line-height: 1.1;
   border: 1px solid var(--border-strong);
   font-weight: 700;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.pdf-download-btn {
+  margin-top: 0.15rem;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.pdf-download-btn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 
 .support-chip {
@@ -830,7 +869,7 @@
   margin-bottom: 0.85rem;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.55rem;
   padding-left: 1.15rem;
 }
@@ -897,6 +936,9 @@
 .meta-line {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   font-size: 0.9rem;
   color: var(--muted-text);
   margin-bottom: 0.4rem;

@@ -60,6 +60,8 @@ DOMAIN_HINTS = {
         "csk",
         "rcb",
         "world cup",
+        "olympics",
+        "olympic",
     ],
     "economy": [
         "economy",
@@ -93,6 +95,8 @@ DOMAIN_HINTS = {
         "chip",
         "robot",
         "5g",
+        "6g",
+        "telecom",
     ],
 }
 
@@ -118,7 +122,7 @@ def _fallback_domain(claim: str) -> str:
     if scores[best_domain] > 0:
         return best_domain
 
-    return "science"
+    return "general"
 
 
 def classify_domain(claim: str) -> str:

@@ -5,10 +5,12 @@ const COLOR_MAP = {
   FALSE: "#ef4444",
   MISLEADING: "#f97316",
   UNVERIFIED: "#6b7280",
+  INSUFFICIENT_DATA: "#94a3b8",
 };
 
 function VerdictBadge({ verdict }) {
-  const color = COLOR_MAP[verdict] || COLOR_MAP.UNVERIFIED;
+  const label = String(verdict || "UNVERIFIED").toUpperCase();
+  const color = COLOR_MAP[label] || COLOR_MAP.UNVERIFIED;
 
   return (
     <motion.div
@@ -23,7 +25,7 @@ function VerdictBadge({ verdict }) {
       }}
       className="verdict-badge"
     >
-      {verdict}
+      {label}
     </motion.div>
   );
 }

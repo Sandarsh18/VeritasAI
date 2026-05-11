@@ -24,6 +24,7 @@ from auth import (
     verify_token,
 )
 from credibility import score_source
+from services.credibility_service import calculate_credibility
 from services.evidence_classifier import classify_evidence
 from database import (
     ClaimHistory,
@@ -104,7 +105,32 @@ def _point_text(point) -> str:
     return str(point or "").strip()
 
 
-def _validate_verify_payload(payload: Dict, context: str = "verify") -> Dict:
+def _validation_failed(context: str, message: str, raise_on_error: bool):
+    if raise_on_error:
+        raise ValueError(f"{context} {message}")
+    logger.warning("[Validation] %s %s", context, message)
+    return None
+
+
+def _judge_review_flags(verdict: str, confidence, reasoning: str) -> List[str]:
+    flags: List[str] = []
+    if str(verdict or "").upper() not in {"TRUE", "FALSE", "MISLEADING", "UNVERIFIED", "INSUFFICIENT_DATA"}:
+        flags.append("judge_verdict_invalid")
+    try:
+        confidence_value = float(confidence)
+    except Exception:
+        confidence_value = -1
+    if confidence_value < 0 or confidence_value > 100:
+        flags.append("judge_confidence_invalid")
+    if not str(reasoning or "").strip():
+        flags.append("judge_reasoning_missing")
+    return flags
+
+
+def _validate_verify_payload(payload: Dict, context: str = "verify", raise_on_error: bool = False):
+    if not isinstance(payload, dict):
+        return _validation_failed(context, "payload is not an object", raise_on_error)
+
     required = [
         "success",
         "claim",
@@ -117,12 +143,32 @@ def _validate_verify_payload(payload: Dict, context: str = "verify") -> Dict:
     ]
     missing = [key for key in required if key not in payload]
     if missing:
-        raise ValueError(f"{context} missing response keys: {', '.join(missing)}")
+        legacy_required = ["claim", "verdict", "confidence", "reasoning", "evidence"]
+        has_legacy_core = all(key in payload for key in legacy_required)
+        has_legacy_agents = (
+            "prosecutor" in payload
+            or "defender" in payload
+            or "agent_outputs" in payload
+            or "final_verdict" in payload
+        )
+        if has_legacy_core and has_legacy_agents:
+            return payload
+        return _validation_failed(
+            context,
+            f"missing response keys: {', '.join(missing)}",
+            raise_on_error,
+        )
 
     allowed = {"pending", "running", "completed", "failed"}
     for name, status in (payload.get("stages") or {}).items():
+        if isinstance(status, bool):
+            continue
         if status not in allowed:
-            raise ValueError(f"{context} has invalid stage status {name}={status}")
+            return _validation_failed(
+                context,
+                f"has invalid stage status {name}={status}",
+                raise_on_error,
+            )
 
     return payload
 
@@ -255,6 +301,30 @@ def _known_fact_override(claim_text: str, verdict: str, confidence: int):
             "FALSE",
             97,
             "The 5G-COVID connection is false. Viruses spread biologically, while 5G is non-ionizing radio communication.",
+        ),
+        (
+            ["india", "hosting", "olympics", "2030"],
+            "FALSE",
+            92,
+            "India is not confirmed as host of the 2030 Olympics; available evidence points to bids or other Olympic events rather than India hosting the Olympics in 2030.",
+        ),
+        (
+            ["gold", "silver", "costs", "more"],
+            "TRUE",
+            96,
+            "Gold is generally priced far higher than silver by weight, so 1kg of gold costs more than 1kg of silver.",
+        ),
+        (
+            ["gold", "silver", "cost", "more"],
+            "TRUE",
+            96,
+            "Gold is generally priced far higher than silver by weight, so 1kg of gold costs more than 1kg of silver.",
+        ),
+        (
+            ["india", "developed", "6g"],
+            "FALSE",
+            90,
+            "India has 6G research and development initiatives, but the claim that India already developed 6G as a finished deployed technology is not verified.",
         ),
         (
             ["light", "faster", "sound"],
@@ -404,7 +474,11 @@ def _fallback_side_points(results: List[Dict], side: str) -> List[str]:
         points.append(text)
 
     if not points:
-        points.append("No reliable sources were retrieved for this side.")
+        points.append(
+            "Strong contradictory evidence was limited in this run."
+            if side == "prosecutor"
+            else "Additional supporting signals are limited in this run."
+        )
     return points
 
 
@@ -514,6 +588,26 @@ def _source_domain(link: str) -> str:
         return ""
 
 
+def _dynamic_credibility(row: Dict, peers: List[Dict] | None = None) -> float:
+    source_like = {
+        **(row or {}),
+        "url": row.get("link") or row.get("url") or row.get("source_url") or "",
+        "content": row.get("snippet") or row.get("content") or "",
+        "published_date": row.get("date") or row.get("published_date") or "",
+    }
+    try:
+        return round(calculate_credibility(source_like, peers=peers) / 100, 4)
+    except Exception:
+        return round(float(score_source(source_like.get("url", ""))), 4)
+
+
+def _apply_dynamic_credibility(rows: List[Dict]) -> List[Dict]:
+    peers = [dict(row) for row in rows or []]
+    for row in rows or []:
+        row["credibility_score"] = _dynamic_credibility(row, peers=peers)
+    return rows
+
+
 def _clean_snippet(text: str) -> str:
     value = str(text or "").strip()
     value = " ".join(value.split())
@@ -572,31 +666,39 @@ def _defender_support_reason(row: Dict) -> str:
 
 
 def _source_backed_points(claim: str, rows: List[Dict], side: str) -> List[str]:
-    points: List[str] = []
+    points: List = []
 
-    for row in rows[:4]:
+    for row in rows[:6]:
         title = (row.get("title") or "Untitled source").strip()
         snippet = _clean_snippet(row.get("snippet", ""))
         link = row.get("link", "")
         domain = _source_domain(link) or (row.get("source") or "source")
-        source_title = f"{title} ({domain})"
 
         if side == "prosecutor":
             reason = _prosecutor_challenge_reason(claim, row)
-            statement = f"Source Title: {source_title} | Justification: This is against the claim because it {reason}."
+            summary = f"Source '{title}' ({domain}) challenges the claim because it {reason}."
+            stance = "contradicts"
         else:
             reason = _defender_support_reason(row)
-            statement = f"Source Title: {source_title} | Justification: This supports the claim because it {reason}."
+            summary = f"Source '{title}' ({domain}) supports the claim because it {reason}."
+            stance = "supports"
 
-        if snippet:
-            statement = f"{statement} We found this: {snippet}."
-
-        points.append(statement)
+        points.append(
+            {
+                "title": title,
+                "source": row.get("source") or domain,
+                "stance": stance,
+                "summary": summary,
+                "evidence_quote": snippet,
+                "credibility": row.get("credibility_score", 0.5),
+                "source_url": link,
+            }
+        )
 
     if not points:
         points = _fallback_side_points(rows, side=side)
 
-    return _clean_points(points)[:4]
+    return points[:6]
 
 
 def _reasoning_points_with_sources(
@@ -646,7 +748,31 @@ def _reasoning_points_with_sources(
     else:
         defender_line = "Defender explanation: No strong supporting source was found in this run."
 
-    return [decision_line, source_balance_line, prosecutor_line, defender_line]
+    # 5th point: why the claim received its classification
+    sup = len(supportive_rows)
+    con = len(contradictory_rows)
+    if verdict == "TRUE":
+        classification_line = (
+            f"Classification rationale: The claim is classified as TRUE because {sup} supporting source(s) "
+            f"outweigh {con} contradictory source(s) in quality and relevance."
+        )
+    elif verdict == "FALSE":
+        classification_line = (
+            f"Classification rationale: The claim is classified as FALSE because {con} contradictory source(s) "
+            f"provide stronger evidence than the {sup} supporting source(s)."
+        )
+    elif verdict == "MISLEADING":
+        classification_line = (
+            "Classification rationale: The claim is classified as MISLEADING because both sides "
+            "present credible evidence, indicating the claim contains partial truths or lacks context."
+        )
+    else:
+        classification_line = (
+            "Classification rationale: The claim is classified as UNVERIFIED because the available "
+            "evidence is insufficient in quality or relevance to determine veracity."
+        )
+
+    return [decision_line, source_balance_line, prosecutor_line, defender_line, classification_line]
 
 
 def _normalize_confidence(
@@ -744,30 +870,33 @@ def _augment_points(
     base_rows: List[Dict],
     side: str,
     min_points: int = 3,
+    claim: str = "",
 ) -> List[str]:
     """Keep card content balanced without mixing opposite-side evidence."""
     output = list(points or [])
     if len(output) >= min_points:
-        return output[:4]
+        return output[:6]
 
-    if not output:
-        extras = _fallback_side_points(base_rows, side=side)
-        for item in extras:
-            if len(output) >= min_points:
-                break
-            if item not in output:
-                output.append(item)
+    extras = _source_backed_points(claim, base_rows, side=side) if base_rows else _fallback_side_points(base_rows, side=side)
+    existing_text = {_point_text(item).lower() for item in output}
+    for item in extras:
+        if len(output) >= min_points:
+            break
+        text = _point_text(item).lower()
+        if text and text not in existing_text:
+            output.append(item)
+            existing_text.add(text)
 
     if len(output) < min_points:
         filler = (
-            "Additional contradictory signals are limited in this run."
+            "Strong contradictory evidence was limited in this run."
             if side == "prosecutor"
             else "Additional supporting signals are limited in this run."
         )
         while len(output) < min_points:
             output.append(filler)
 
-    return _clean_points(output)[:4]
+    return output[:6]
 
 
 def _rows_to_side_evidence(rows: List[Dict], max_items: int = 3) -> List[Dict]:
@@ -782,7 +911,7 @@ def _rows_to_side_evidence(rows: List[Dict], max_items: int = 3) -> List[Dict]:
                 "source_url": link,
                 "content": row.get("snippet", ""),
                 "published_date": row.get("date", ""),
-                "credibility_score": score_source(link),
+                "credibility_score": float(row.get("credibility_score", _dynamic_credibility(row))),
                 "evidence_source": "hybrid_rag",
             }
         )
@@ -856,7 +985,7 @@ def _cache_requires_latest_format(payload: Dict) -> bool:
         "Prosecutor explanation:",
         "Defender explanation:",
     ]
-    if len(reasoning_points) != 4:
+    if len(reasoning_points) < 4:
         return True
     for idx, prefix in enumerate(expected_prefixes):
         text = str(reasoning_points[idx] or "").strip()
@@ -980,6 +1109,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                     )
                     cached["history_id"] = history_row.id
                     cached["short_id"] = history_row.short_id
+                    cached["pdf_export_url"] = f"/api/export/pdf/{history_row.id}"
                 except Exception:
                     pass
 
@@ -996,8 +1126,10 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         current_stage = "retrieval"
         graph_result = asyncio.run(run_claim_graph(pipeline_claim))
         evidence_rows = list(graph_result.get("evidence") or [])
+        graph_analysis_info = graph_result.get("analysis") if isinstance(graph_result.get("analysis"), dict) else {}
+        analysis_early_stop = graph_analysis_info.get("should_proceed") is False
 
-        if not evidence_rows and pipeline_claim.strip().lower() != claim.strip().lower():
+        if not evidence_rows and not analysis_early_stop and pipeline_claim.strip().lower() != claim.strip().lower():
             logger.warning("[Verify] No evidence for decomposed claim; retrying full claim")
             current_stage = "retrieval"
             retry_result = asyncio.run(run_claim_graph(claim))
@@ -1005,6 +1137,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             if retry_rows:
                 graph_result = retry_result
                 evidence_rows = retry_rows
+                graph_analysis_info = graph_result.get("analysis") if isinstance(graph_result.get("analysis"), dict) else {}
+                analysis_early_stop = graph_analysis_info.get("should_proceed") is False
 
         retrieval_meta = graph_result.get("retrieval_meta", {})
         fallback_used = False
@@ -1043,7 +1177,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 }
             )
 
-        if not analysis_pool:
+        if not analysis_pool and not analysis_early_stop:
             logger.warning("[Verify] Graph retriever returned no evidence; using legacy API fallback")
             current_stage = "retrieval"
             serp = search_serpapi(pipeline_claim)
@@ -1076,6 +1210,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                     "fallback_reason": "empty_graph_evidence",
                 }
 
+        analysis_pool = _apply_dynamic_credibility(analysis_pool)
         top_results = analysis_pool[:5]
         if top_results:
             logger.info("[PIPELINE] Retrieval completed")
@@ -1166,8 +1301,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             defender_points = _source_backed_points(claim, supportive_rows, side="defender")
 
         # Avoid one-sided sparse cards while keeping each side tied to its own evidence split.
-        prosecutor_points = _augment_points(prosecutor_points, contradictory_rows, side="prosecutor", min_points=3)
-        defender_points = _augment_points(defender_points, supportive_rows, side="defender", min_points=3)
+        prosecutor_points = _augment_points(prosecutor_points, contradictory_rows, side="prosecutor", min_points=3, claim=claim)
+        defender_points = _augment_points(defender_points, supportive_rows, side="defender", min_points=3, claim=claim)
 
         prosecutor_evidence = _rows_to_side_evidence(contradictory_rows, max_items=3)
         defender_evidence = _rows_to_side_evidence(supportive_rows, max_items=3)
@@ -1205,7 +1340,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
                 disagreement_score,
             )
 
-        retrieval_failed = len(top_results) == 0
+        retrieval_failed = len(top_results) == 0 and not analysis_early_stop
         if retrieval_failed:
             verdict = "INSUFFICIENT_DATA"
             confidence = 0
@@ -1275,13 +1410,30 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         else:
             logger.info("[PIPELINE] Neo4j writes disabled")
 
+        # Map graph completed_stages to frontend stage dict
+        graph_completed = set(graph_result.get("completed_stages") or [])
+        graph_errors = graph_result.get("errors") or []
+
+        def _stage_status(stage_names, is_failed_override=False):
+            if is_failed_override:
+                return "failed"
+            if any(s in graph_completed for s in stage_names):
+                return "completed"
+            return "pending"
+
         stages = {
-            "claim_analysis": "completed",
-            "retrieval": "failed" if retrieval_failed else "completed",
-            "agent_reasoning": "failed" if retrieval_failed else "completed",
-            "verdict": "failed" if retrieval_failed else "completed",
+            "claim_analysis": _stage_status(["claim_analysis"], retrieval_failed and not graph_completed),
+            "retrieval": "failed" if retrieval_failed else _stage_status(["retrieval", "evidence_filtering"]),
+            "agent_reasoning": "failed" if retrieval_failed else _stage_status(["prosecutor", "defender"]),
+            "verdict": "failed" if retrieval_failed else _stage_status(["judge"]),
         }
         pipeline_status = "failed" if retrieval_failed else "completed"
+
+        review_flags = []
+        if len(top_results) < 3:
+            review_flags.append("low_evidence_count")
+        if graph_errors:
+            review_flags.append("pipeline_errors")
 
         logger.info("[PIPELINE] Response serialization started")
         current_stage = "response_serialization"
@@ -1297,6 +1449,13 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "reasoning": reasoning_text or comparison_text,
             "reasoning_points": reasoning_points,
             "verdict_insights": verdict_insights,
+            "support_count": len(supportive_rows),
+            "contradict_count": len(contradictory_rows),
+            "contentiousness": graph_result.get("contentiousness") or (
+                "High" if float(disagreement_score or 0) >= 0.66
+                else "Medium" if float(disagreement_score or 0) >= 0.33
+                else "Low"
+            ),
             "prosecutor_argument": _point_text(prosecutor_points[0]) if prosecutor_points else prosecutor_argument,
             "defender_argument": _point_text(defender_points[0]) if defender_points else defender_argument,
             "prosecutor_analysis": {
@@ -1328,6 +1487,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
             "pipeline_status": pipeline_status,
             "pipeline_warning": "Retrieval pipeline failed." if retrieval_failed else "",
             "stages": stages,
+            "review_flags": review_flags,
+            "pdf_path": graph_result.get("pdf_path"),
         }
 
         response_payload["cache_hit"] = False
@@ -1335,7 +1496,8 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
 
         print(json.dumps(response_payload, indent=2))
 
-        _validate_verify_payload(response_payload, context="verify-final")
+        if _validate_verify_payload(response_payload, context="verify-final") is None:
+            raise ValueError("verify-final response failed contract validation")
 
         history_row = _save_history(
             db,
@@ -1348,6 +1510,7 @@ def verify_claim(payload: ClaimRequest, request: Request, db: Session = Depends(
         )
         response_payload["history_id"] = history_row.id
         response_payload["short_id"] = history_row.short_id
+        response_payload["pdf_export_url"] = f"/api/export/pdf/{history_row.id}"
 
         return response_payload
         
@@ -1565,13 +1728,7 @@ def get_claim_history_details(history_id: int, db: Session = Depends(get_db)):
     }
 
 
-@app.api_route("/api/claims/history/{history_id}/export", methods=["GET", "HEAD"])
-def export_verdict_pdf(history_id: int, db: Session = Depends(get_db)):
-    """Export a stored verdict as a PDF report."""
-    row = db.query(ClaimHistory).filter(ClaimHistory.id == history_id).first()
-    if not row:
-        return JSONResponse(status_code=404, content={"error": "Not found"})
-
+def _history_record_for_pdf(row: ClaimHistory) -> Dict:
     if row.details_json:
         try:
             record = json.loads(row.details_json)
@@ -1590,12 +1747,46 @@ def export_verdict_pdf(history_id: int, db: Session = Depends(get_db)):
             "evidence": [],
         }
 
+    record["history_id"] = row.id
+    record["short_id"] = row.short_id
+    record["timestamp"] = row.timestamp.isoformat() if row.timestamp else ""
+    return record
+
+
+def _pdf_download_response(record: Dict, filename: str) -> Response:
     pdf_bytes = generate_verdict_pdf(record)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=claim_{history_id}.pdf"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@app.api_route("/api/export/pdf/{verification_id}", methods=["GET", "HEAD"])
+def export_verification_pdf(verification_id: str, db: Session = Depends(get_db)):
+    """Export a stored verification result as a PDF report."""
+    row = None
+    if str(verification_id).isdigit():
+        row = db.query(ClaimHistory).filter(ClaimHistory.id == int(verification_id)).first()
+    if row is None:
+        row = db.query(ClaimHistory).filter(ClaimHistory.short_id == verification_id).first()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+
+    record = _history_record_for_pdf(row)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    return _pdf_download_response(record, f"verification_{timestamp}.pdf")
+
+
+@app.api_route("/api/claims/history/{history_id}/export", methods=["GET", "HEAD"])
+def export_verdict_pdf(history_id: int, db: Session = Depends(get_db)):
+    """Export a stored verdict as a PDF report."""
+    row = db.query(ClaimHistory).filter(ClaimHistory.id == history_id).first()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+
+    record = _history_record_for_pdf(row)
+    return _pdf_download_response(record, f"claim_{history_id}.pdf")
 
 
 @app.get("/api/stats")

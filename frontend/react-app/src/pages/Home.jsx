@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Download } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 import AgentCard from "../components/AgentCard";
@@ -9,7 +10,7 @@ import PipelineProgress from "../components/PipelineProgress";
 import SkeletonCard from "../components/SkeletonCard";
 import VerdictBadge from "../components/VerdictBadge";
 import { useVoiceInput, useVoiceOutput } from "../hooks/useVoice";
-import { getHistory, getHistoryDetails, verifyClaim } from "../services/api";
+import { exportPdf, getHistory, getHistoryDetails, verifyClaim } from "../services/api";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -102,6 +103,7 @@ function Home() {
   const [error, setError] = useState("");
   const [pipelineMessage, setPipelineMessage] = useState("");
   const [recentClaims, setRecentClaims] = useState([]);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [, setPendingStages] = useState(null);
   const handledNavClaimRef = useRef("");
   const ttsEnabled = false;
@@ -293,8 +295,32 @@ function Home() {
     setResult(null);
     setError("");
     setLoading(false);
+    setPdfLoading(false);
     setPipelineMessage("");
     setPendingStages(null);
+  };
+
+  const handleDownloadPdf = async () => {
+    const verificationId = result?.history_id || result?.short_id;
+    if (!verificationId || pdfLoading) return;
+
+    setPdfLoading(true);
+    try {
+      const blob = await exportPdf(verificationId);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      anchor.href = url;
+      anchor.download = `verification_${timestamp}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err?.response?.data?.detail || err.message || "Failed to download PDF");
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   return (
@@ -453,6 +479,16 @@ function Home() {
                       </span>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className="secondary-btn pdf-download-btn"
+                    onClick={handleDownloadPdf}
+                    disabled={pdfLoading || !(result?.history_id || result?.short_id)}
+                    title="Download PDF report"
+                  >
+                    <Download size={16} aria-hidden="true" />
+                    {pdfLoading ? "Preparing PDF..." : "Download PDF"}
+                  </button>
                   {(result?.verdict_insights?.top_supporting || []).length > 0 && (
                     <div className="insight-links">
                       <strong>Top supporting source:</strong>

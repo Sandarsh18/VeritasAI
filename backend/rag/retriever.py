@@ -575,9 +575,7 @@ def _domain_match(required_domain: str, article: Dict, claim: str, keywords: Lis
         f"{article.get('title', '')} "
         f"{article.get('content', '')} "
         f"{article.get('full_content', '')} "
-        f"{article.get('source', '')} "
-        f"{claim} "
-        f"{' '.join(keywords or [])}"
+        f"{article.get('source', '')}"
     )
     inferred = _infer_domain(text)
     return inferred == normalized
@@ -744,7 +742,7 @@ Rules:
     return understood
 
 
-def _generate_query_variants(claim: str, understanding: Dict, max_queries: int = 5) -> List[str]:
+def _generate_query_variants(claim: str, understanding: Dict, max_queries: int = 7) -> List[str]:
     claim_text = " ".join((claim or "").split())
     if not claim_text:
         return []
@@ -756,6 +754,7 @@ def _generate_query_variants(claim: str, understanding: Dict, max_queries: int =
 
     entities = [str(e).strip() for e in (understanding.get("entities") or []) if str(e).strip()]
     keywords = [str(x).strip() for x in (understanding.get("keywords") or []) if str(x).strip()]
+    domain = str(understanding.get("domain") or "").strip().lower()
 
     if entities:
         base_entities = " ".join(entities[:3])
@@ -763,10 +762,19 @@ def _generate_query_variants(claim: str, understanding: Dict, max_queries: int =
         variants.append(f"{base_entities} official report")
         if keywords:
             variants.append(f"{base_entities} {' '.join(keywords[:2])}")
+        # Paraphrased entity-focused variants
+        if len(entities) >= 2:
+            variants.append(f"{entities[0]} {entities[1]} latest news")
+        variants.append(f"{base_entities} verified")
 
     keyword_query = " ".join(keywords[:6]).strip()
     if keyword_query:
         variants.append(keyword_query)
+
+    # Domain-specific query expansion
+    if domain and domain != "general":
+        domain_query = f"{claim_text} {domain}"
+        variants.append(domain_query)
 
     # Deduplicate while preserving order.
     unique: List[str] = []
@@ -1604,13 +1612,32 @@ def retrieve_evidence_minimal(
             )
             parsed_articles.append(row)
 
+        required_domain = _normalize_domain(domain)
+        keyword_terms = terms or _query_terms(claim, keywords)
         filtered = [
             row
             for row in parsed_articles
-            if row.get("relevance_score", 0.0) >= 0.05 or row.get("keyword_score", 0.0) >= 0.10
+            if (
+                row.get("relevance_score", 0.0) >= 0.05
+                or row.get("keyword_score", 0.0) >= 0.10
+            )
+            and _domain_match(required_domain, row, claim, keyword_terms)
         ]
-        if len(filtered) < min(5, top_n):
-            filtered = parsed_articles
+        if not filtered:
+            return [], {
+                "claim_understanding": {
+                    "keywords": keyword_terms,
+                    "domain": required_domain,
+                },
+                "queries": query_variants,
+                "api_runs": api_runs,
+                "fallback_used": raw_count == 0,
+                "error": "INSUFFICIENT_DATA",
+                "error_flag": True,
+                "insufficient_data": True,
+                "retrieved_count": 0,
+                "retrieval_time": round(time.perf_counter() - retrieval_start, 4),
+            }
 
         filtered.sort(key=lambda row: row.get("rag_score", 0.0), reverse=True)
         final_ranked = filtered[: max(5, int(top_k or 5))]

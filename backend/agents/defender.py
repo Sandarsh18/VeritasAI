@@ -21,12 +21,12 @@ def _deterministic_arguments(claim: str, evidence: list) -> list:
                     "title": title,
                     "source": source,
                     "stance": "supports",
-                    "summary": f"{source} contains evidence relevant to the claim.",
+                    "summary": f"Source '{title}' ({source}) contains evidence relevant to the claim.",
                     "evidence_quote": content[:260],
                     "credibility": article.get("credibility_score", 0.5),
                 }
             )
-    return arguments[:4]
+    return arguments[:6]
 
 
 def run_defender(claim: str, evidence: list) -> dict:

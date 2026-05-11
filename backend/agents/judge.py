@@ -5,6 +5,7 @@ from llm_client import call_reasoning, extract_json
 import traceback
 
 ENABLE_LLM_AGENTS = os.getenv("VERITAS_ENABLE_LLM_AGENTS", "0") == "1"
+call_with_fallback = call_reasoning
 
 KNOWN_FACTS = {
     "water is h2o": (
@@ -146,6 +147,11 @@ KNOWN_FACTS = {
         "FALSE",
         92,
         "India is not the host of the 2030 Olympics; the 2030 Winter Olympics were awarded to the French Alps.",
+    ),
+    "india already developed 6g": (
+        "FALSE",
+        90,
+        "India has 6G research initiatives, but 6G is not already developed as a finished deployed technology in India.",
     ),
 }
 

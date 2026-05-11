@@ -109,4 +109,19 @@ export const getMe = async () => {
   return data;
 };
 
+export const exportPdf = async (historyId) => {
+  try {
+    const response = await api.get(`/api/export/pdf/${historyId}`, {
+      responseType: "blob",
+    });
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status !== 404) throw error;
+    const response = await api.get(`/api/claims/history/${historyId}/export`, {
+      responseType: "blob",
+    });
+    return response.data;
+  }
+};
+
 export default api;

@@ -8,25 +8,64 @@ ENABLE_LLM_AGENTS = os.getenv("VERITAS_ENABLE_LLM_AGENTS", "0") == "1"
 
 
 def _deterministic_arguments(claim: str, evidence: list) -> list:
-    cues = ["false", "no evidence", "no link", "misleading", "fake", "debunk", "conspiracy", "hoax", "cannot"]
+    cues = [
+        "false",
+        "no evidence",
+        "no link",
+        "misleading",
+        "fake",
+        "debunk",
+        "conspiracy",
+        "hoax",
+        "cannot",
+        "denies",
+        "denied",
+        "not confirmed",
+        "unverified",
+        "no genuine",
+    ]
     arguments = []
+    used_titles = set()
     for article in evidence[:6]:
         title = article.get("title", "").strip() or "Untitled source"
         source = article.get("source", "").strip() or "Unknown"
         content = (article.get("content", "") or article.get("snippet", "")).strip()
         lower = f"{title} {content}".lower()
         if any(cue in lower for cue in cues):
+            used_titles.add(title)
             arguments.append(
                 {
                     "title": title,
                     "source": source,
                     "stance": "contradicts",
-                    "summary": f"{source} reports evidence that challenges the claim.",
+                    "summary": f"Source '{title}' ({source}) contradicts or challenges the claim because it reports a denial, correction, or missing confirmation.",
                     "evidence_quote": content[:260],
                     "credibility": article.get("credibility_score", 0.5),
                 }
             )
-    return arguments[:4]
+
+    if arguments and len(arguments) < 3:
+        for article in evidence[:6]:
+            title = article.get("title", "").strip() or "Untitled source"
+            if title in used_titles:
+                continue
+            source = article.get("source", "").strip() or "Unknown"
+            content = (article.get("content", "") or article.get("snippet", "")).strip()
+            if not content:
+                continue
+            arguments.append(
+                {
+                    "title": title,
+                    "source": source,
+                    "stance": "challenges",
+                    "summary": f"Source '{title}' ({source}) lacks verified confirmation of the claim and should be weighed as a cautionary signal.",
+                    "evidence_quote": content[:260],
+                    "credibility": article.get("credibility_score", 0.5),
+                }
+            )
+            if len(arguments) >= 3:
+                break
+    return arguments[:6]
 
 
 def run_prosecutor(claim: str, evidence: list) -> dict:

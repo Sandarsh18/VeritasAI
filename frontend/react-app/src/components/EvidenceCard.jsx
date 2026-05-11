@@ -5,7 +5,7 @@ function EvidenceCard({ article }) {
   const source = article?.source || "Unknown source";
   const content = article?.content || "No summary available.";
   const sourceUrl = article?.url || article?.source_url || "#";
-  const credibilityValue = Number(article?.credibility ?? article?.credibility_score ?? 0);
+  const credibilityValue = Number(article?.credibility ?? article?.credibility_score ?? 0.5);
   const credibilityScore = credibilityValue > 1 ? credibilityValue / 100 : credibilityValue;
   const evidenceSource = article?.evidence_source || article?.source || "";
 
