@@ -20,6 +20,7 @@ from credibility import score_source
 from llm_client import OLLAMA_ANALYZER, call_ollama, extract_json
 from rag.embeddings import embed_query, embed_texts
 from rag.faiss_store import FaissStore
+from rag.tavily_client import search_tavily, tavily_available
 from services.ranking_service import compare_retrieval_modes, extract_keywords, rank_articles
 
 LOGGER = logging.getLogger("veritas.retriever")
@@ -165,7 +166,11 @@ MISINFO_EXPANSION = {
     "5g": ["5G conspiracy debunked", "WHO 5G safety", "5G health myth fact check"],
     "covid": ["COVID misinformation", "WHO myth fact check", "pandemic hoax debunked"],
     "vaccine": ["vaccine safety CDC", "vaccine myth debunked", "WHO vaccine facts"],
+    "chip": ["COVID vaccine microchip myth fact check", "CDC vaccine microchip misinformation"],
+    "microchip": ["COVID vaccine microchip myth fact check", "CDC vaccine microchip misinformation"],
     "flat earth": ["flat earth debunked", "NASA earth shape evidence"],
+    "earth is flat": ["flat earth debunked", "NASA earth shape evidence", "Earth is spherical evidence"],
+    "earth flat": ["flat earth debunked", "NASA earth shape evidence", "Earth is spherical evidence"],
     "climate": ["climate change evidence IPCC", "global warming scientific consensus"],
     "gmo": ["GMO safety scientific consensus", "GMO myth fact check"],
     "chemtrail": ["chemtrail conspiracy debunked", "contrails scientific explanation"],
@@ -217,6 +222,10 @@ def _expand_misinfo_queries(claim: str, base_variants: List[str]) -> List[str]:
     for trigger, expansions in MISINFO_EXPANSION.items():
         if trigger in claim_lower:
             extra.extend(expansions)
+    if "earth" in claim_lower and "flat" in claim_lower:
+        extra.extend(["flat earth debunked NASA", "Earth spherical evidence NASA"])
+    if "covid" in claim_lower and "vaccine" in claim_lower and ("chip" in claim_lower or "microchip" in claim_lower):
+        extra.extend(["COVID vaccine microchip myth CDC", "COVID vaccines do not contain microchips"])
     # Deduplicate while preserving order
     seen = {v.lower().strip() for v in base_variants}
     for q in extra:
@@ -752,6 +761,19 @@ def _generate_query_variants(claim: str, understanding: Dict, max_queries: int =
         f"{claim_text} fact check",
     ]
 
+    claim_lower = claim_text.lower()
+    if "earth" in claim_lower and "flat" in claim_lower:
+        variants = [
+            "flat earth debunked NASA",
+            "Earth spherical evidence NASA",
+            "flat earth fact check",
+        ] + variants
+    elif "covid" in claim_lower and "vaccine" in claim_lower and ("chip" in claim_lower or "microchip" in claim_lower):
+        variants = [
+            "COVID vaccine microchip myth CDC",
+            "COVID vaccines do not contain microchips fact check",
+        ] + variants
+
     entities = [str(e).strip() for e in (understanding.get("entities") or []) if str(e).strip()]
     keywords = [str(x).strip() for x in (understanding.get("keywords") or []) if str(x).strip()]
     domain = str(understanding.get("domain") or "").strip().lower()
@@ -1172,13 +1194,82 @@ def news_search(query: str, top_n: int = 10) -> List[Dict]:
 def _dedupe(articles: List[Dict]) -> List[Dict]:
     deduped: List[Dict] = []
     seen = set()
+    discarded = 0
     for article in articles:
         key = (article.get("url") or article.get("source_url") or "").strip().lower()
         if not key or key in seen:
+            if key:
+                src = article.get("source") or _domain(key) or "unknown"
+                title = str(article.get("title") or "")[:80]
+                LOGGER.info("DISCARDED: duplicate | source=%s | title=%s", src, title)
+                discarded += 1
             continue
         seen.add(key)
         deduped.append(article)
+    if discarded:
+        LOGGER.info("[Retriever] Dedup dropped %s duplicate(s)", discarded)
     return deduped
+
+
+def _gather_from_providers(query: str, top_n: int = 10) -> Tuple[List[Dict], Dict]:
+    """Tavily-first provider chain: Tavily -> SerpAPI -> NewsAPI.
+
+    Concatenates results from each reached provider (dedup/ranking happens
+    downstream) and records per-provider counts and attempt order in meta.
+    Never raises; a failing provider contributes 0 results.
+    """
+    order: List[str] = []
+    counts: Dict[str, int] = {}
+    collected: List[Dict] = []
+    provider_meta: Dict[str, Dict] = {}
+
+    # 1. Tavily (primary)
+    order.append("tavily")
+    try:
+        tav_articles, tav_meta = search_tavily(query, top_n=top_n)
+    except Exception as exc:  # defensive — search_tavily already guards
+        tav_articles, tav_meta = [], {"ok": False, "error": str(exc)[:200]}
+    counts["tavily"] = len(tav_articles)
+    provider_meta["tavily"] = tav_meta
+    collected.extend(tav_articles)
+
+    # 2. SerpAPI
+    order.append("serpapi")
+    try:
+        serp_articles, serp_meta = _search_serpapi(query, top_n=top_n)
+    except Exception as exc:
+        serp_articles, serp_meta = [], {"ok": False, "error": str(exc)[:200]}
+    counts["serpapi"] = len(serp_articles)
+    provider_meta["serpapi"] = serp_meta
+    collected.extend(serp_articles)
+
+    # 3. NewsAPI
+    order.append("newsapi")
+    try:
+        news_articles, news_meta = _search_newsapi(query, top_n=top_n)
+    except Exception as exc:
+        news_articles, news_meta = [], {"ok": False, "error": str(exc)[:200]}
+    counts["newsapi"] = len(news_articles)
+    provider_meta["newsapi"] = news_meta
+    collected.extend(news_articles)
+
+    LOGGER.info(
+        "[Retriever] Provider gather query='%s' order=%s counts=%s",
+        query,
+        order,
+        counts,
+    )
+
+    meta = {
+        "query": query,
+        "provider_order": order,
+        "provider_counts": counts,
+        "tavily": provider_meta["tavily"],
+        "serpapi": provider_meta["serpapi"],
+        "newsapi": provider_meta["newsapi"],
+        "raw_count": len(collected),
+    }
+    return collected, meta
 
 
 def _top_raw_fallback(claim: str, articles: List[Dict], limit: int = 5) -> List[Dict]:
@@ -1567,21 +1658,26 @@ def retrieve_evidence_minimal(
 
         combined_articles: List[Dict] = []
         api_runs = []
+        provider_count_totals = {"tavily": 0, "serpapi": 0, "newsapi": 0}
         attempts = max(1, int(max_retries or 0) + 1)
         for attempt in range(attempts):
             attempt_meta = {"attempt": attempt + 1, "queries": []}
             for run_query in query_variants[:3]:
                 LOGGER.info("[Retriever] Minimal search attempt=%s query='%s'", attempt + 1, run_query)
-                serp_articles, serp_meta = _search_serpapi(run_query, top_n=top_n)
-                news_articles, news_meta = _search_newsapi(run_query, top_n=top_n)
-                parsed_for_query = _dedupe(serp_articles + news_articles)
+                gathered, gather_meta = _gather_from_providers(run_query, top_n=top_n)
+                parsed_for_query = _dedupe(gathered)
                 combined_articles.extend(parsed_for_query)
+                for prov, cnt in (gather_meta.get("provider_counts") or {}).items():
+                    provider_count_totals[prov] = provider_count_totals.get(prov, 0) + cnt
                 attempt_meta["queries"].append(
                     {
                         "query": run_query,
-                        "serpapi": serp_meta,
-                        "newsapi": news_meta,
-                        "raw_count": len(serp_articles) + len(news_articles),
+                        "provider_order": gather_meta.get("provider_order"),
+                        "provider_counts": gather_meta.get("provider_counts"),
+                        "tavily": gather_meta.get("tavily"),
+                        "serpapi": gather_meta.get("serpapi"),
+                        "newsapi": gather_meta.get("newsapi"),
+                        "raw_count": gather_meta.get("raw_count", 0),
                         "parsed_count": len(parsed_for_query),
                     }
                 )
@@ -1614,15 +1710,25 @@ def retrieve_evidence_minimal(
 
         required_domain = _normalize_domain(domain)
         keyword_terms = terms or _query_terms(claim, keywords)
-        filtered = [
-            row
-            for row in parsed_articles
-            if (
-                row.get("relevance_score", 0.0) >= 0.05
-                or row.get("keyword_score", 0.0) >= 0.10
-            )
-            and _domain_match(required_domain, row, claim, keyword_terms)
-        ]
+        filtered = []
+        for row in parsed_articles:
+            rel = row.get("relevance_score", 0.0)
+            kw = row.get("keyword_score", 0.0)
+            src = row.get("source") or _domain(row.get("url", "")) or "unknown"
+            title = str(row.get("title") or "")[:80]
+            if not (rel >= 0.05 or kw >= 0.10):
+                LOGGER.info(
+                    "DISCARDED: relevance below threshold | source=%s | title=%s | rel=%.3f kw=%.3f",
+                    src, title, float(rel), float(kw),
+                )
+                continue
+            if not _domain_match(required_domain, row, claim, keyword_terms):
+                LOGGER.info(
+                    "DISCARDED: domain mismatch (%s) | source=%s | title=%s",
+                    required_domain, src, title,
+                )
+                continue
+            filtered.append(row)
         if not filtered:
             return [], {
                 "claim_understanding": {
@@ -1665,6 +1771,7 @@ def retrieve_evidence_minimal(
             "claim_understanding": {"domain": domain, "keywords": terms},
             "queries": query_variants,
             "api_runs": api_runs,
+            "provider_counts": provider_count_totals,
             "raw_count": raw_count,
             "parsed_count": len(parsed_articles),
             "filtered_count": len(filtered),
@@ -1753,22 +1860,23 @@ def retrieve_evidence(
 
         for run_query in attempt_queries:
             LOGGER.info("[Retriever] Search attempt=%s query='%s'", attempt + 1, run_query)
-            serp_articles, serp_meta = _search_serpapi(run_query, top_n=10)
-            news_articles, news_meta = _search_newsapi(run_query, top_n=10)
-            merged_for_query = _dedupe(serp_articles + news_articles)
+            gathered, gather_meta = _gather_from_providers(run_query, top_n=10)
+            merged_for_query = _dedupe(gathered)
             LOGGER.info(
-                "[Retriever] Raw API results query='%s' serp=%s news=%s merged=%s",
+                "[Retriever] Raw API results query='%s' providers=%s merged=%s",
                 run_query,
-                len(serp_articles),
-                len(news_articles),
+                gather_meta.get("provider_counts"),
                 len(merged_for_query),
             )
             collected_this_attempt.extend(merged_for_query)
             attempt_meta["queries"].append(
                 {
                     "query": run_query,
-                    "serpapi": serp_meta,
-                    "newsapi": news_meta,
+                    "provider_order": gather_meta.get("provider_order"),
+                    "provider_counts": gather_meta.get("provider_counts"),
+                    "tavily": gather_meta.get("tavily"),
+                    "serpapi": gather_meta.get("serpapi"),
+                    "newsapi": gather_meta.get("newsapi"),
                     "merged_count": len(merged_for_query),
                 }
             )

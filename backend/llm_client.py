@@ -29,6 +29,50 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 gemini_available = bool(GEMINI_API_KEY and GEMINI_API_KEY != "DISABLED")
+_gemini_disabled_until = 0.0
+
+
+def _gemini_finish_reason(response) -> str:
+    """Best-effort extraction of the first candidate's finish_reason."""
+    try:
+        return str(response.candidates[0].finish_reason)
+    except Exception:
+        return "unknown"
+
+
+def _safe_gemini_text(response) -> str:
+    """Safely extract text from a Gemini response.
+
+    The SDK's ``response.text`` quick-accessor raises a ValueError when the
+    candidate contains no Part (e.g. finish_reason=MAX_TOKENS/SAFETY). We walk
+    the candidate parts manually so a thinking-only or blocked response degrades
+    to an empty string instead of throwing.
+    """
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) or []
+            collected = []
+            for part in parts:
+                value = getattr(part, "text", "") or ""
+                if value:
+                    collected.append(value)
+            if collected:
+                return "".join(collected).strip()
+    except Exception:
+        pass
+    return ""
+
+# ============================================================
+# GROQ CONFIGURATION (PRIMARY CLOUD REASONING)
+# ============================================================
+# Groq offers a fast, reliable free tier and is used as the primary reasoning
+# provider for prosecutor/defender/judge. Gemini and Ollama are fallbacks.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_JUDGE_MODEL", "llama-3.3-70b-versatile").strip()
+groq_available = bool(GROQ_API_KEY and GROQ_API_KEY != "DISABLED")
+_groq_disabled_until = 0.0
 
 # ============================================================
 # OLLAMA CONFIGURATION (PRIMARY LOCAL FALLBACK)
@@ -45,9 +89,10 @@ OLLAMA_MODEL = OLLAMA_REASONING_MODEL
 # ============================================================
 # INIT MESSAGE
 # ============================================================
+print(f"[LLM] Groq: {'ready (' + GROQ_MODEL + ')' if groq_available else 'DISABLED'}")
 print(f"[LLM] Gemini: {'ready' if gemini_available else 'DISABLED'}")
 print(f"[LLM] Ollama: {OLLAMA_BASE_URL} (reasoning={OLLAMA_REASONING_MODEL})")
-print(f"[LLM] Stack: Gemini={'yes' if gemini_available else 'no'} | Ollama=yes")
+print(f"[LLM] Stack: Groq={'yes' if groq_available else 'no'} | Gemini={'yes' if gemini_available else 'no'} | Ollama=yes")
 
 
 # ============================================================
@@ -92,15 +137,11 @@ def call_ollama(
     print(f"\n[{agent_name}] -> Ollama ({use_model})")
     start_time = time.time()
 
-    try:
-        if not OLLAMA_ENABLED:
-            LOGGER.warning("[%s] Ollama fallback disabled", agent_name)
-            return ""
-
-        response = http_requests.post(
+    def _post_generate(target_model: str) -> http_requests.Response:
+        return http_requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json={
-                "model": use_model,
+                "model": target_model,
                 "prompt": prompt,
                 "stream": False,
                 "options": {
@@ -113,11 +154,45 @@ def call_ollama(
             },
             timeout=timeout_seconds,
         )
+
+    try:
+        if not OLLAMA_ENABLED:
+            LOGGER.warning("[%s] Ollama fallback disabled", agent_name)
+            return ""
+
+        response = _post_generate(use_model)
         response.raise_for_status()
         text = response.json().get("response", "").strip()
         elapsed = round(time.time() - start_time, 1)
         print(f"[{agent_name}] Ollama OK {elapsed}s")
         return text
+    except http_requests.exceptions.HTTPError as exc:
+        response = exc.response
+        body = (response.text if response is not None else "")[:300]
+        status = response.status_code if response is not None else "n/a"
+        missing_model = status == 404 and "not found" in body.lower() and "model" in body.lower()
+        fallback_model = OLLAMA_REASONING_MODEL
+
+        if missing_model and fallback_model and use_model != fallback_model:
+            LOGGER.warning(
+                "[%s] Ollama model '%s' missing; retrying with '%s'",
+                agent_name,
+                use_model,
+                fallback_model,
+            )
+            try:
+                retry_response = _post_generate(fallback_model)
+                retry_response.raise_for_status()
+                text = retry_response.json().get("response", "").strip()
+                elapsed = round(time.time() - start_time, 1)
+                print(f"[{agent_name}] Ollama OK {elapsed}s (fallback model={fallback_model})")
+                return text
+            except Exception:
+                LOGGER.exception("[%s] Ollama fallback model call failed", agent_name)
+
+        print(f"[{agent_name}] Ollama error: HTTP {status} {body}")
+        LOGGER.exception("[%s] FULL ERROR TRACE", agent_name)
+        return ""
     except http_requests.exceptions.Timeout:
         print(f"[{agent_name}] Ollama timeout after {timeout_seconds}s")
         LOGGER.warning("[%s] Ollama timeout after %ss", agent_name, timeout_seconds)
@@ -139,8 +214,13 @@ def call_gemini(
     timeout_seconds: int = 30,
 ) -> str:
     """Call Google Gemini API."""
+    global _gemini_disabled_until
     if not gemini_available:
         print(f"[{agent_name}] Gemini not available, skipping")
+        return ""
+
+    if time.time() < _gemini_disabled_until:
+        LOGGER.warning("[%s] Gemini temporarily disabled after recent quota/rate-limit failure", agent_name)
         return ""
 
     print(f"\n[{agent_name}] -> Gemini ({GEMINI_MODEL})")
@@ -152,23 +232,37 @@ def call_gemini(
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel(GEMINI_MODEL)
 
+        # gemini-2.5-* models spend part of the output-token budget on internal
+        # "thinking". With a small budget they can hit MAX_TOKENS (finish_reason=2)
+        # before emitting any answer, which surfaces as an empty response. We pad
+        # the budget so reasoning agents always have room for real output.
+        effective_tokens = max(int(max_tokens), 1024)
+
         response = model.generate_content(
             prompt,
             generation_config={
-                "max_output_tokens": max_tokens,
+                "max_output_tokens": effective_tokens,
                 "temperature": temperature,
             },
             request_options={"timeout": timeout_seconds},
         )
 
-        text = response.text.strip() if response.text else ""
+        text = _safe_gemini_text(response)
         elapsed = round(time.time() - start_time, 1)
+        if not text:
+            finish = _gemini_finish_reason(response)
+            print(f"[{agent_name}] Gemini empty (finish={finish}) in {elapsed}s")
+            return ""
         print(f"[{agent_name}] Gemini OK {elapsed}s")
         return text
 
     except Exception as exc:
         elapsed = round(time.time() - start_time, 1)
         print(f"[{agent_name}] Gemini error ({elapsed}s): {str(exc)[:80]}")
+        error_text = str(exc).lower()
+        if "quota" in error_text or "resourceexhausted" in error_text or "429" in error_text:
+            _gemini_disabled_until = time.time() + int(os.getenv("GEMINI_RATE_LIMIT_COOLDOWN_SECONDS", "3600"))
+            LOGGER.warning("[%s] Gemini disabled temporarily because quota/rate limit was hit", agent_name)
         LOGGER.exception("[%s] FULL ERROR TRACE", agent_name)
         return ""
 
@@ -182,9 +276,18 @@ def call_reasoning(
     agent_name: str = "Agent",
 ) -> str:
     """
-    Call Gemini for reasoning tasks (prosecutor, defender, judge).
-    Falls back to Ollama if Gemini fails or unavailable.
+    Reasoning provider chain for prosecutor/defender/judge:
+      1. Groq   (fast, reliable free tier) — primary
+      2. Gemini (good reasoning, but free tier rate-limits quickly)
+      3. Ollama (local, slow, last resort)
+    Returns the first non-empty response.
     """
+    if groq_available:
+        result = call_groq(prompt, max_tokens=max_tokens, agent_name=agent_name)
+        if result and len(result) > 20:
+            return result
+        print(f"[{agent_name}] Groq failed or empty, trying Gemini")
+
     if gemini_available:
         result = call_gemini(
             prompt,
@@ -213,8 +316,42 @@ def call_deepseek(prompt: str, max_tokens: int = 1000, agent_name: str = "Prosec
     return call_reasoning(prompt, max_tokens, agent_name)
 
 def call_groq(prompt: str, model: str = None, max_tokens: int = 800, agent_name: str = "Agent") -> str:
-    """Deprecated: redirects to call_reasoning for Defender/Judge."""
-    return call_reasoning(prompt, max_tokens, agent_name)
+    """Call Groq chat completions. Fast, reliable primary reasoning provider."""
+    global _groq_disabled_until
+    if not groq_available:
+        return ""
+    if time.time() < _groq_disabled_until:
+        LOGGER.warning("[%s] Groq temporarily disabled after recent rate-limit failure", agent_name)
+        return ""
+
+    target_model = model or GROQ_MODEL
+    print(f"\n[{agent_name}] -> Groq ({target_model})")
+    start_time = time.time()
+    try:
+        from groq import Groq
+
+        client = Groq(api_key=GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model=target_model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.2,
+        )
+        text = (response.choices[0].message.content or "").strip()
+        elapsed = round(time.time() - start_time, 1)
+        if not text:
+            print(f"[{agent_name}] Groq empty in {elapsed}s")
+            return ""
+        print(f"[{agent_name}] Groq OK {elapsed}s")
+        return text
+    except Exception as exc:
+        elapsed = round(time.time() - start_time, 1)
+        print(f"[{agent_name}] Groq error ({elapsed}s): {str(exc)[:80]}")
+        error_text = str(exc).lower()
+        if "rate" in error_text or "quota" in error_text or "429" in error_text:
+            _groq_disabled_until = time.time() + int(os.getenv("GROQ_RATE_LIMIT_COOLDOWN_SECONDS", "120"))
+            LOGGER.warning("[%s] Groq disabled temporarily after rate limit", agent_name)
+        return ""
 
 def call_with_fallback(prompt: str, primary_model: str, max_tokens: int = 600, agent_name: str = "Agent") -> str:
     """Deprecated: redirects to call_reasoning."""
@@ -283,7 +420,7 @@ def extract_json(text: str) -> dict:
 # HEALTH CHECK
 # ============================================================
 def test_all_connections() -> dict:
-    """Test all available LLM connections."""
+    """Return cheap provider readiness without generating model output."""
     status = {
         "gemini": {
             "status": "ready" if gemini_available else "disabled",
@@ -299,24 +436,16 @@ def test_all_connections() -> dict:
         "serpapi": {"status": "configured" if os.getenv("SERPAPI_KEY") else "missing"},
     }
 
-    # Test Gemini
-    if gemini_available:
-        test_result = call_gemini(
-            'Respond with valid JSON only: {"status":"ok"}',
-            max_tokens=30,
-            agent_name="HealthCheck",
-        )
-        if test_result:
-            status["gemini"]["status"] = "ready"
-        else:
-            status["gemini"]["status"] = "unreachable"
-
-    # Test Ollama
-    test_result = call_ollama(
-        'Respond with: {"status":"ok"}',
-        max_tokens=30,
-        agent_name="HealthCheck",
-    )
-    status["ollama"]["status"] = "ready" if test_result else "unreachable"
+    try:
+        response = http_requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
+        status["ollama"]["status"] = "ready" if response.status_code == 200 else "unreachable"
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            names = [str(item.get("name", "")) for item in models if isinstance(item, dict)]
+            status["ollama"]["installed_models"] = [name for name in names if name]
+            if OLLAMA_REASONING_MODEL not in status["ollama"]["installed_models"]:
+                status["ollama"]["status"] = "model_missing"
+    except Exception:
+        status["ollama"]["status"] = "unreachable"
 
     return status

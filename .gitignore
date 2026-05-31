@@ -9,6 +9,11 @@ venv/
 # Env and secrets
 .env
 *.env
+.env.*
+.env.docker
+!*.env.example
+!.env.example
+!.env.docker.example
 
 # Logs and local data
 *.log
@@ -19,6 +24,8 @@ veritas.db
 # Node
 node_modules/
 dist/
+build/
+coverage/
 
 # OS/editor
 .DS_Store

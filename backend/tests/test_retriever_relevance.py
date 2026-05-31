@@ -58,6 +58,11 @@ def test_retrieve_evidence_filters_irrelevant_domain(monkeypatch):
     )
     monkeypatch.setattr(
         retriever,
+        "search_tavily",
+        lambda query, top_n=10: ([], {"ok": False, "count": 0, "provider": "tavily"}),
+    )
+    monkeypatch.setattr(
+        retriever,
         "_search_serpapi",
         lambda query, top_n=10: ([dict(tech_doc), dict(sports_doc)], {"ok": True, "count": 2}),
     )
@@ -125,6 +130,11 @@ def test_retrieve_evidence_returns_insufficient_data(monkeypatch):
         retriever,
         "_generate_query_variants",
         lambda claim, understanding, max_queries=5: [claim],
+    )
+    monkeypatch.setattr(
+        retriever,
+        "search_tavily",
+        lambda query, top_n=10: ([], {"ok": False, "count": 0, "provider": "tavily"}),
     )
     monkeypatch.setattr(
         retriever,

@@ -123,7 +123,15 @@ function Home() {
 
   const readResultCache = () => {
     try {
-      return JSON.parse(localStorage.getItem("veritas-results-cache") || "{}");
+      const parsed = JSON.parse(localStorage.getItem("veritas-results-cache") || "{}");
+      const now = Date.now();
+      const ttlMs = 15 * 60 * 1000;
+      return Object.fromEntries(
+        Object.entries(parsed || {}).filter(([, value]) => {
+          const savedAt = Number(value?.__savedAt || 0);
+          return savedAt && now - savedAt < ttlMs;
+        })
+      );
     } catch {
       return {};
     }
@@ -150,8 +158,8 @@ function Home() {
 
     const cache = readResultCache();
     if (cache[claimText]) {
-      setResult(cache[claimText]);
-      setPipelineMessage("Loaded cached verification. Refreshing with latest evidence…");
+      setResult(null);
+      setPipelineMessage("Refreshing with latest evidence…");
       setLoading(true);
       try {
         const fresh = normalizeVerificationResult(await verifyClaim(claimText));
@@ -159,7 +167,8 @@ function Home() {
         persistResult(claimText, fresh);
         setPipelineMessage("Updated with latest analysis.");
       } catch {
-        setPipelineMessage("Using cached verification (refresh failed).");
+        setResult(normalizeVerificationResult(cache[claimText]));
+        setPipelineMessage("Using recent cached verification because refresh failed.");
       } finally {
         setLoading(false);
       }
@@ -255,8 +264,8 @@ function Home() {
 
     const cache = readResultCache();
     if (cache[claimText]) {
-      setResult(cache[claimText]);
-      setPipelineMessage("Loaded cached result instantly. Refreshing with latest evidence…");
+      setResult(null);
+      setPipelineMessage("Refreshing with latest evidence…");
       setLoading(true);
       try {
         const fresh = normalizeVerificationResult(await verifyClaim(claimText));
@@ -264,7 +273,8 @@ function Home() {
         persistResult(claimText, fresh);
         setPipelineMessage("Updated with latest analysis.");
       } catch {
-        setPipelineMessage("Using cached result (refresh failed).");
+        setResult(normalizeVerificationResult(cache[claimText]));
+        setPipelineMessage("Using recent cached result because refresh failed.");
       } finally {
         setLoading(false);
       }

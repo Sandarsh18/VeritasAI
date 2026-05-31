@@ -223,8 +223,10 @@ def smart_fallback(claim, p_str, d_str, p_args, d_args) -> dict:
             "verdict": "TRUE",
             "confidence": conf,
             "reasoning": (
-                f"Supporting evidence ({d_str}) outweighs "
-                f"contradicting evidence ({p_str}) for: '{claim}'."
+                f"The Defender is stronger here: supporting evidence is rated '{d_str}' versus the "
+                f"Prosecutor's '{p_str}'. The Defender cites sources that directly corroborate the claim, "
+                f"while the Prosecutor only raises limited caveats or weaker counter-signals for: '{claim}'. "
+                f"Because the supporting case outweighs the challenge, the verdict is TRUE."
             ),
             "key_evidence": (d_args or [])[:2],
             "prosecutor_strength": p_str,
@@ -237,8 +239,10 @@ def smart_fallback(claim, p_str, d_str, p_args, d_args) -> dict:
             "verdict": "FALSE",
             "confidence": conf,
             "reasoning": (
-                f"Contradicting evidence ({p_str}) outweighs "
-                f"supporting evidence ({d_str}) for: '{claim}'."
+                f"The Prosecutor is stronger here: contradicting evidence is rated '{p_str}' versus the "
+                f"Defender's '{d_str}'. The Prosecutor cites sources that directly conflict with the claim, "
+                f"while the Defender offers only weaker or contextual support for: '{claim}'. "
+                f"Because the challenge outweighs the supporting case, the verdict is FALSE."
             ),
             "key_evidence": (p_args or [])[:2],
             "prosecutor_strength": p_str,
@@ -281,6 +285,18 @@ def run_judge(claim, prosecutor, defender, evidence) -> dict:
     
     logger.info("[Judge] Evaluating: '%s'", claim)
     print(f"\n[Judge] Evaluating: '{claim}'")
+
+    p_str_in = prosecutor.get("prosecution_strength", "none")
+    d_str_in = defender.get("defense_strength", "none")
+    logger.info(
+        "JUDGE INPUT: claim='%s' evidence_count=%d prosecutor_strength=%s prosecutor_args=%d defender_strength=%s defender_args=%d",
+        claim,
+        len(evidence or []),
+        p_str_in,
+        len(prosecutor.get("arguments") or []),
+        d_str_in,
+        len(defender.get("arguments") or []),
+    )
 
     # CRITICAL: Check for no evidence first
     if not evidence:
@@ -344,6 +360,10 @@ def run_judge(claim, prosecutor, defender, evidence) -> dict:
         )
         fallback["evidence_count"] = len(evidence)
         logger.info("[Judge] Deterministic verdict: %s @ %s%%", fallback["verdict"], fallback["confidence"])
+        logger.info(
+            "JUDGE OUTPUT: verdict=%s confidence=%s (deterministic) p_strength=%s d_strength=%s",
+            fallback["verdict"], fallback["confidence"], p_str, d_str,
+        )
         return fallback
 
     ev_text = "\n".join(
@@ -408,6 +428,10 @@ def run_judge(claim, prosecutor, defender, evidence) -> dict:
         result["reasoning"] = _ensure_reasoning_with_evidence(reasoning, evidence)
         result["evidence_count"] = len(evidence)
         logger.info("[Judge] Final verdict: %s @ %d%% (evidence=%d)", result['verdict'], result['confidence'], len(evidence))
+        logger.info(
+            "JUDGE OUTPUT: verdict=%s confidence=%s (llm) p_strength=%s d_strength=%s",
+            result['verdict'], result['confidence'], p_str, d_str,
+        )
         print(f"[Judge] OK {result['verdict']} @ {result['confidence']}%")
         return result
 

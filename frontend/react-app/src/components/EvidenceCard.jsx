@@ -8,6 +8,7 @@ function EvidenceCard({ article }) {
   const credibilityValue = Number(article?.credibility ?? article?.credibility_score ?? 0.5);
   const credibilityScore = credibilityValue > 1 ? credibilityValue / 100 : credibilityValue;
   const evidenceSource = article?.evidence_source || article?.source || "";
+  const stance = String(article?.stance || "").toUpperCase();
 
   // Source quality badge
   const getSourceBadge = (score) => {
@@ -37,11 +38,29 @@ function EvidenceCard({ article }) {
       newsapi: "📰 NewsAPI",
       rss: "📡 RSS Live",
       knowledge_base: "✅ Verified Fact",
+      curated_fact_base: "✅ Verified Fact",
     };
     return tags[source] || "📄 Source";
   };
 
+  const getStanceBadge = (value) => {
+    if (value === "SUPPORTS")
+      return {
+        label: "Supports claim",
+        bg: "#dcfce7",
+        color: "#166534",
+      };
+    if (value === "CONTRADICTS")
+      return {
+        label: "Contradicts claim",
+        bg: "#fee2e2",
+        color: "#991b1b",
+      };
+    return null;
+  };
+
   const sourceBadge = getSourceBadge(credibilityScore);
+  const stanceBadge = getStanceBadge(stance);
 
   return (
     <motion.div
@@ -99,6 +118,20 @@ function EvidenceCard({ article }) {
         >
           {getSourceTag(evidenceSource)}
         </span>
+        {stanceBadge && (
+          <span
+            style={{
+              background: stanceBadge.bg,
+              color: stanceBadge.color,
+              padding: "0.2rem 0.5rem",
+              borderRadius: "999px",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+            }}
+          >
+            {stanceBadge.label}
+          </span>
+        )}
       </div>
       <motion.p 
         initial={{ opacity: 0 }} 

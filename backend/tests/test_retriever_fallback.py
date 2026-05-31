@@ -42,6 +42,11 @@ def test_retrieve_evidence_falls_back_to_local_dataset(monkeypatch):
     )
     monkeypatch.setattr(
         retriever,
+        "search_tavily",
+        lambda query, top_n=10: ([], {"ok": False, "count": 0, "provider": "tavily"}),
+    )
+    monkeypatch.setattr(
+        retriever,
         "_load_local_fallback",
         lambda claim, keywords=None: [dict(local_row)],
     )

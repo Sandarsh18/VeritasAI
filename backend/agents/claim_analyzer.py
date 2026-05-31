@@ -50,6 +50,14 @@ DOMAIN_HINTS = {
         "climate",
         "research",
         "experiment",
+        "moon",
+        "earth",
+        "isro",
+        "dinosaur",
+        "t-rex",
+        "trex",
+        "tyrannosaurus",
+        "mount everest",
     ],
     "sports": [
         "cricket",
@@ -103,6 +111,7 @@ DOMAIN_HINTS = {
 
 def _fallback_domain(claim: str) -> str:
     text = (claim or "").lower()
+    tokens = set(re.findall(r"[a-z0-9]+", text))
 
     # Required hard fallback rules.
     if "covid" in text:
@@ -115,7 +124,10 @@ def _fallback_domain(claim: str) -> str:
     scores = {domain: 0 for domain in ALLOWED_DOMAINS}
     for domain, hints in DOMAIN_HINTS.items():
         for hint in hints:
-            if hint in text:
+            if hint == "ai":
+                if hint in tokens:
+                    scores[domain] += 1
+            elif hint in text:
                 scores[domain] += 1
 
     best_domain = max(scores, key=scores.get)

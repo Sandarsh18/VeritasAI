@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+venv
+.venv
+*.log
+veritas.db
+data
+tmp
+.env
+.env.*

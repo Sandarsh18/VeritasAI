@@ -1,7 +1,15 @@
 import axios from "axios";
 
+// VITE_API_BASE_URL resolution:
+// - Local dev (no Docker): "http://localhost:8000" (set in .env)
+// - Docker Compose: "" (empty) -> requests use same-origin relative paths
+//   like "/api/verify", which nginx proxies to the backend container.
+// The `?? ` operator preserves an intentional empty string for Docker.
+const apiBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
+  baseURL: apiBaseUrl,
   timeout: 300000,
 });
 

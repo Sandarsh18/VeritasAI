@@ -360,18 +360,46 @@ def _filter_node(state: ClaimState) -> ClaimState:
     }
 
     relevant: List[Dict] = []
+    scored_relevance: List[tuple[int, Dict]] = []
     for row in title_deduped:
         text = f"{row.get('title', '')} {row.get('content', '')} {row.get('snippet', '')}".lower()
         overlap = sum(1 for t in claim_terms if t in text)
-        if overlap >= 1 or not claim_terms:
+        scored_relevance.append((overlap, row))
+        required_overlap = 1
+        if len(claim_terms) >= 4:
+            required_overlap = 2
+        elif len(claim_terms) >= 2:
+            required_overlap = min(2, len(claim_terms))
+        if overlap >= required_overlap or not claim_terms:
             relevant.append(row)
 
-    # If filtering removed too many, relax and keep all
+    # If filtering removed too many, keep only the strongest partial matches.
     if len(relevant) < 3 and len(title_deduped) >= 3:
-        relevant = title_deduped
+        partial = [row for overlap, row in sorted(scored_relevance, key=lambda item: item[0], reverse=True) if overlap > 0]
+        if partial:
+            relevant = partial[:5]
 
     # Cap at 12, minimum target 5
     filtered = relevant[:12]
+
+    # Evidence Preservation Rule: never starve the agents. When raw evidence
+    # exists, guarantee at least EVIDENCE_FLOOR items survive filtering so the
+    # Prosecutor and Defender each receive a usable list. Top up from the
+    # highest-overlap deduped rows if relevance filtering was too aggressive.
+    EVIDENCE_FLOOR = 3
+    if len(filtered) < EVIDENCE_FLOOR and title_deduped:
+        ranked_backfill = [row for _, row in sorted(scored_relevance, key=lambda item: item[0], reverse=True)]
+        seen_keys = {id(r) for r in filtered}
+        for row in ranked_backfill:
+            if len(filtered) >= min(EVIDENCE_FLOOR, len(title_deduped)):
+                break
+            if id(row) not in seen_keys:
+                filtered.append(row)
+                seen_keys.add(id(row))
+        LOGGER.info(
+            "[Graph] Evidence Preservation Rule: backfilled to %d (floor=%d, available=%d)",
+            len(filtered), EVIDENCE_FLOOR, len(title_deduped),
+        )
 
     LOGGER.info(
         "[Graph] Filter: raw=%d deduped=%d relevant=%d final=%d",

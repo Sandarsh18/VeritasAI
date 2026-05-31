@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 
 function AgentCard({ role, title, result, emptyMessage = "No agent reasoning available." }) {
-  const roleLabel = role === "prosecutor" ? "🛡️ Prosecutor" : "⚖️ Defender";
+  const roleLabel = role === "prosecutor" ? "⚔️ Prosecutor" : "🛡️ Defender";
 
   const entries = result?.arguments || [];
 

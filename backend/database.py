@@ -20,6 +20,14 @@ engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+def _sqlite_path() -> str:
+    if DATABASE_URL.startswith("sqlite:///"):
+        return DATABASE_URL.replace("sqlite:///", "", 1)
+    if DATABASE_URL.startswith("sqlite://"):
+        return DATABASE_URL.replace("sqlite://", "", 1)
+    return "veritas.db"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -103,7 +111,7 @@ def get_cached_result(claim_hash: str, max_age_hours: int = 24):
     import sqlite3
     from datetime import datetime, timedelta
 
-    conn = sqlite3.connect("veritas.db")
+    conn = sqlite3.connect(_sqlite_path())
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -155,7 +163,7 @@ def save_cached_result(claim_hash: str, result: dict):
         logger.warning("Skipping cache write for claim_hash=%s due to JSON encoding failure", claim_hash)
         return False
 
-    conn = sqlite3.connect("veritas.db")
+    conn = sqlite3.connect(_sqlite_path())
     try:
         cursor = conn.cursor()
         cursor.execute("""
